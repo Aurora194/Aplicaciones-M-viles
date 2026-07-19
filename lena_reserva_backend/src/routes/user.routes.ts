@@ -1,12 +1,9 @@
 import { Router } from "express";
+import { controller } from "../controllers/user.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { authorizeRole } from "../middleware/role.middleware";
-import * as userController from "../controllers/user.controller";
-import { validate } from "../middleware/validate.middleware";
-import { updateUserSchema } from "../validations/user.validation";
 
 const router = Router();
-
 /**
  * @swagger
  * tags:
@@ -14,101 +11,173 @@ const router = Router();
  *   description: Gestión de usuarios
  */
 
-/**
- * @swagger
- * /api/usuarios/perfil:
- *   get:
- *     summary: Obtener perfil del usuario autenticado
- *     tags: [Usuarios]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Perfil obtenido correctamente
- */
-router.get(
-    "/perfil",
-    authenticateToken,
-    (req, res) => {
-        res.json({
-            success: true,
-            usuario: req.user
-        });
-    }
-);
-
-/**
- * @swagger
- * /api/usuarios/admin:
- *   get:
- *     summary: Panel administrador
- *     tags: [Usuarios]
- */
-router.get(
-    "/admin",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    (req, res) => {
-        res.json({
-            success: true,
-            mensaje: "Bienvenido administrador"
-        });
-    }
-);
-
-/**
- * @swagger
- * /api/usuarios:
- *   get:
- *     summary: Listar usuarios
- *     tags: [Usuarios]
- */
 router.get(
     "/",
     authenticateToken,
     authorizeRole("ADMIN"),
-    userController.listUsers
+    controller.getUsers.bind(controller)
 );
-
 /**
  * @swagger
- * /api/usuarios/{id}:
+ * /api/users:
  *   get:
- *     summary: Obtener usuario por ID
+ *     summary: Obtener usuarios
+ *     description: Lista usuarios con paginación, búsqueda y filtros.
+ *     tags:
+ *       - Usuarios
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           example: 1
+ *
+ *       - name: limit
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           example: 10
+ *
+ *       - name: search
+ *         in: query
+ *         schema:
+ *           type: string
+ *           example: Juan
+ *
+ *       - name: rol
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - ADMIN
+ *             - CLIENTE
+ *
+ *     responses:
+ *       200:
+ *         description: Usuarios encontrados
+ *
+ *       401:
+ *         description: Token inválido
+ *
+ *       403:
+ *         description: Sin permisos
+ */ 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     summary: Obtener un usuario por ID
  *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Usuario encontrado.
+ *       404:
+ *         description: Usuario no encontrado.
+ *       401:
+ *         description: Token inválido.
+ *       403:
+ *         description: Acceso denegado.
  */
 router.get(
     "/:id",
     authenticateToken,
-    userController.getOne
+    authorizeRole("ADMIN"),
+    controller.getUserById.bind(controller)
 );
 
 /**
  * @swagger
- * /api/usuarios/{id}:
+ * /api/users/{id}:
  *   put:
- *     summary: Actualizar usuario
+ *     summary: Actualizar un usuario
  *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 1
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *                 example: Juan
+ *               apellido:
+ *                 type: string
+ *                 example: Pérez
+ *               telefono:
+ *                 type: string
+ *                 example: 0999999999
+ *               rol:
+ *                 type: string
+ *                 enum:
+ *                   - ADMIN
+ *                   - CLIENTE
+ *     responses:
+ *       200:
+ *         description: Usuario actualizado correctamente.
+ *       404:
+ *         description: Usuario no encontrado.
+ *       401:
+ *         description: Token inválido.
+ *       403:
+ *         description: Acceso denegado.
  */
 router.put(
     "/:id",
     authenticateToken,
-    validate(updateUserSchema),
-    userController.update
+    authorizeRole("ADMIN"),
+    controller.updateUser.bind(controller)
 );
-
 /**
  * @swagger
- * /api/usuarios/{id}:
+ * /api/users/{id}:
  *   delete:
- *     summary: Eliminar usuario
+ *     summary: Eliminar un usuario (Soft Delete)
  *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Usuario eliminado correctamente.
+ *       404:
+ *         description: Usuario no encontrado.
+ *       401:
+ *         description: Token inválido.
+ *       403:
+ *         description: Acceso denegado.
  */
 router.delete(
     "/:id",
     authenticateToken,
     authorizeRole("ADMIN"),
-    userController.remove
+    controller.deleteUser.bind(controller)
 );
 
 export default router;

@@ -1,134 +1,49 @@
 import { Request, Response } from "express";
-import * as service from "../services/mesa.service";
-import { success } from "../utils/response";
-import ApiError from "../utils/ApiError";
+import { MesaService } from "../services/mesa.service";
 
-export async function list(req: Request, res: Response) {
+const service = new MesaService();
 
-    const mesas = await service.getMesas();
+export class MesaController {
 
-    res.json(
+  async getMesas(req: Request, res: Response) {
 
-    success(
+    try {
 
-        mesas,
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 10;
+      const search = req.query.search as string;
 
-        "Mesas obtenidas correctamente."
+      const disponible =
+        req.query.disponible === undefined
+          ? undefined
+          : req.query.disponible === "true";
 
-    )
+      const order =
+        (req.query.order as "asc" | "desc") || "asc";
 
-);
+      const result = await service.getMesas(
+        page,
+        limit,
+        search,
+        disponible,
+        order
+      );
 
-}
+      return res.status(200).json(result);
 
-export async function disponibles(req: Request, res: Response) {
+    } catch (error) {
 
-    const mesas = await service.mesasDisponibles();
+      console.error(error);
 
-    res.json(
-
-    success(
-
-        mesas,
-
-        "Mesas disponibles obtenidas correctamente."
-
-    )
-
-);
-
-}
-
-export async function getOne(req: Request, res: Response) {
-
-    const mesa = await service.getMesa(Number(req.params.id));
-
-    if (!mesa) {
-
-
-        throw new ApiError(
-
-            404,
-
-            "Mesa no encontrado."
-
-        );
+      return res.status(500).json({
+        success: false,
+        message: "Error interno del servidor"
+      });
 
     }
 
-    res.json(
-
-    success(
-
-        mesa,
-
-        "Mesa obtenida correctamente."
-
-    )
-
-);
+  }
 
 }
 
-export async function create(req: Request, res: Response) {
-
-    const mesa = await service.createMesa(req.body);
-
-    res.status(201).json(
-
-    success(
-
-        mesa,
-
-        "Mesa creada correctamente."
-
-    )
-
-);
-
-}
-
-export async function update(req: Request, res: Response) {
-
-    const mesa = await service.updateMesa(
-
-        Number(req.params.id),
-
-        req.body
-
-    );
-
-    res.json(
-
-    success(
-
-        mesa,
-
-        "Mesa actualizada correctamente."
-
-    )
-
-);
-}
-
-export async function remove(req: Request, res: Response) {
-
-    await service.deleteMesa(
-
-        Number(req.params.id)
-
-    );
-
-    res.json(
-
-        success(
-
-            null,
-
-            "Mesa eliminada correctamente."
-
-        )
-
-    );
-
-}
+export const controller = new MesaController();

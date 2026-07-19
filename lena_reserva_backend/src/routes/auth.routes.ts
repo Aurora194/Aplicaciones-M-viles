@@ -1,119 +1,126 @@
 import { Router } from "express";
-
 import {
+    login,
+    register,
+    refresh,
+    logout
+} from "../controllers/auth.controller";
 
-    getUsers,
-
-    getUserById,
-
-    updateUser,
-
-    deleteUser
-
-} from "../controllers/user.controller";
-
-import { authenticateToken } from "../middleware/auth.middleware";
-import { authorizeRole } from "../middleware/role.middleware";
 
 const router = Router();
+
 
 /**
  * @swagger
  * tags:
- *   name: Usuarios
- *   description: Gestión de usuarios
+ *   name: Auth
+ *   description: Autenticación de usuarios
  */
+
 
 /**
  * @swagger
- * /api/users:
- *   get:
- *     summary: Obtener usuarios con paginación, búsqueda y filtros
- *     tags: [Usuarios]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *         example: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         example: 10
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         example: juan
- *       - in: query
- *         name: rol
- *         schema:
- *           type: string
- *         example: CLIENTE
- *       - in: query
- *         name: sortBy
- *         schema:
- *           type: string
- *         example: nombre
- *       - in: query
- *         name: order
- *         schema:
- *           type: string
- *         example: asc
+ * /api/auth/register:
+ *   post:
+ *     summary: Registrar usuario
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *                 example: Juan
+ *               apellido:
+ *                 type: string
+ *                 example: Perez
+ *               correo:
+ *                 type: string
+ *                 example: juan@gmail.com
+ *               telefono:
+ *                 type: string
+ *                 example: 0999999999
+ *               password:
+ *                 type: string
+ *                 example: 123456
+ *     responses:
+ *       201:
+ *         description: Usuario creado
+ */
+router.post(
+    "/register",
+    register
+);
+
+
+
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login usuario
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               correo:
+ *                 type: string
+ *                 example: admin@gmail.com
+ *               password:
+ *                 type: string
+ *                 example: 123456
  *     responses:
  *       200:
- *         description: Lista de usuarios.
+ *         description: Login correcto
  */
-
-router.get(
-
-    "/",
-
-    authenticateToken,
-
-    authorizeRole("ADMIN"),
-
-    getUsers
-
+router.post(
+    "/login",
+    login
 );
 
-router.get(
 
-    "/:id",
 
-    authenticateToken,
-
-    authorizeRole("ADMIN"),
-
-    getUserById
-
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Renovar Access Token
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Token renovado
+ */
+router.post(
+    "/refresh",
+    refresh
 );
 
-router.put(
 
-    "/:id",
 
-    authenticateToken,
-
-    authorizeRole("ADMIN"),
-
-    updateUser
-
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Cerrar sesión
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logout correcto
+ */
+router.post(
+    "/logout",
+    logout
 );
 
-router.delete(
 
-    "/:id",
-
-    authenticateToken,
-
-    authorizeRole("ADMIN"),
-
-    deleteUser
-
-);
 
 export default router;

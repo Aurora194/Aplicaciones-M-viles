@@ -36,6 +36,17 @@ export function generateAccessToken(usuario:any){
 
 
 
+export function verifyAccessToken(token:string){
+
+    return jwt.verify(
+        token,
+        ACCESS_SECRET
+    );
+
+}
+
+
+
 export function generateRefreshToken(usuario:any){
 
     return jwt.sign(

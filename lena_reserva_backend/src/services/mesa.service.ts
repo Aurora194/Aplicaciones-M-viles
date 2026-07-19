@@ -1,83 +1,82 @@
-import prisma from "../config/prisma";
+import { PrismaClient } from "@prisma/client";
 
-export function getMesas() {
+const prisma = new PrismaClient();
 
-    return prisma.mesa.findMany({
+export class MesaService {
 
-        orderBy: {
+  async getMesas(
+    page = 1,
+    limit = 10,
+    search?: string,
+    disponible?: boolean,
+    order: "asc" | "desc" = "asc"
+  ) {
 
-            numero: "asc"
+    const skip = (page - 1) * limit;
 
-        }
+    const where: any = {
+      deletedAt: null
+    };
 
+    if (search) {
+      where.numero = {
+        equals: Number(search)
+      };
+    }
+
+    if (disponible !== undefined) {
+      where.disponible = disponible;
+    }
+
+    const total = await prisma.mesa.count({ where });
+
+    const mesas = await prisma.mesa.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: {
+        numero: order
+      }
     });
 
-}
+    return {
+      success: true,
+      data: mesas,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
 
-export function getMesa(id: number) {
+  async deleteMesa(id: number) {
 
-    return prisma.mesa.findUnique({
-
-        where: { id }
-
+    const mesa = await prisma.mesa.findFirst({
+      where: {
+        id,
+        deletedAt: null
+      }
     });
 
-}
+    if (!mesa) {
+      throw new Error("Mesa no encontrada");
+    }
 
-export function createMesa(data: any) {
-
-    return prisma.mesa.create({
-
-        data
-
+    await prisma.mesa.update({
+      where: {
+        id
+      },
+      data: {
+        deletedAt: new Date()
+      }
     });
 
-}
-
-export function updateMesa(
-
-    id: number,
-
-    data: any
-
-) {
-
-    return prisma.mesa.update({
-
-        where: { id },
-
-        data
-
-    });
-
-}
-
-export function deleteMesa(id: number) {
-
-    return prisma.mesa.delete({
-
-        where: { id }
-
-    });
-
-}
-
-export function mesasDisponibles() {
-
-    return prisma.mesa.findMany({
-
-        where: {
-
-            disponible: true
-
-        },
-
-        orderBy: {
-
-            numero: "asc"
-
-        }
-
-    });
+    return {
+      success: true,
+      message: "Mesa eliminada correctamente"
+    };
+  }
 
 }

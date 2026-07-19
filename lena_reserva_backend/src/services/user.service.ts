@@ -1,188 +1,182 @@
-import prisma from "../config/prisma";
+import { PrismaClient, Rol } from "@prisma/client";
 
-interface GetUsersParams {
-    page?: number;
-    limit?: number;
-    search?: string;
-    rol?: string;
-    sortBy?: string;
-    order?: "asc" | "desc";
-}
+const prisma = new PrismaClient();
 
-export async function getUsers(params: GetUsersParams) {
+export class UserService {
 
-    const page = Number(params.page) || 1;
-
-    const limit = Number(params.limit) || 10;
+  async getUsers(
+    page: number,
+    limit: number,
+    search?: string,
+    rol?: Rol
+  ) {
 
     const skip = (page - 1) * limit;
 
     const where: any = {
-
-        deletedAt: null
-
+      deletedAt: null
     };
 
-    if (params.search) {
-
-        where.OR = [
-
-            {
-
-                nombre: {
-
-                    contains: params.search
-
-                }
-
-            },
-
-            {
-
-                apellido: {
-
-                    contains: params.search
-
-                }
-
-            },
-
-            {
-
-                correo: {
-
-                    contains: params.search
-
-                }
-
-            }
-
-        ];
-
-    }
-
-    if (params.rol) {
-
-        where.rol = params.rol;
-
-    }
-
-    const users = await prisma.usuario.findMany({
-
-        where,
-
-        skip,
-
-        take: limit,
-
-        orderBy: {
-
-            [params.sortBy || "id"]:
-
-                params.order || "asc"
-
+    // Buscar por nombre, apellido o correo
+    if (search) {
+      where.OR = [
+        {
+          nombre: {
+            contains: search
+            // mode: "insensitive" // Solo si tu versión de Prisma/MySQL lo soporta
+          }
         },
-
-        select: {
-
-            id: true,
-
-            nombre: true,
-
-            apellido: true,
-
-            correo: true,
-
-            telefono: true,
-
-            rol: true,
-
-            createdAt: true
-
+        {
+          apellido: {
+            contains: search
+            // mode: "insensitive"
+          }
+        },
+        {
+          correo: {
+            contains: search
+            // mode: "insensitive"
+          }
         }
+      ];
+    }
 
-    });
+    // Filtrar por rol
+    if (rol) {
+      where.rol = rol;
+    }
 
     const total = await prisma.usuario.count({
+      where
+    });
 
-        where
-
+    const usuarios = await prisma.usuario.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: {
+        id: "asc"
+      },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        correo: true,
+        telefono: true,
+        rol: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
 
     return {
-
-        data: users,
-
-        pagination: {
-
-            total,
-
-            page,
-
-            limit,
-
-            totalPages: Math.ceil(total / limit)
-
-        }
-
+      success: true,
+      message: "Lista de usuarios",
+      data: usuarios,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
     };
+  }
 
-}
+  async getUserById(id: number) {
 
-export async function getUserById(id: number) {
-
-    return prisma.usuario.findFirst({
-
-        where: {
-
-            id,
-
-            deletedAt: null
-
-        }
-
+    const usuario = await prisma.usuario.findFirst({
+      where: {
+        id,
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        correo: true,
+        telefono: true,
+        rol: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
 
-}
+    if (!usuario) {
+      throw new Error("Usuario no encontrado");
+    }
 
-export async function updateUser(
+    return {
+      success: true,
+      usuario
+    };
+  }
 
-    id: number,
+  async updateUser(id: number, data: any) {
 
-    data: any
-
-) {
-
-    return prisma.usuario.update({
-
-        where: {
-
-            id
-
-        },
-
-        data
-
+    // Verificar que el usuario exista
+    const existe = await prisma.usuario.findFirst({
+      where: {
+        id,
+        deletedAt: null
+      }
     });
 
-}
+    if (!existe) {
+      throw new Error("Usuario no encontrado");
+    }
 
-export async function deleteUser(id: number) {
-
-    return prisma.usuario.update({
-
-        where: {
-
-            id
-
-        },
-
-        data: {
-
-            deletedAt: new Date()
-
-        }
-
+    const usuario = await prisma.usuario.update({
+      where: {
+        id
+      },
+      data,
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        correo: true,
+        telefono: true,
+        rol: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
+
+    return {
+      success: true,
+      message: "Usuario actualizado correctamente",
+      usuario
+    };
+  }
+
+  async deleteUser(id: number) {
+
+    // Verificar que exista
+    const existe = await prisma.usuario.findFirst({
+      where: {
+        id,
+        deletedAt: null
+      }
+    });
+
+    if (!existe) {
+      throw new Error("Usuario no encontrado");
+    }
+
+    // Soft Delete
+    await prisma.usuario.update({
+      where: {
+        id
+      },
+      data: {
+        deletedAt: new Date()
+      }
+    });
+
+    return {
+      success: true,
+      message: "Usuario eliminado correctamente"
+    };
+  }
 
 }

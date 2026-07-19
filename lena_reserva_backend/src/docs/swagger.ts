@@ -2,39 +2,39 @@ import swaggerJsdoc from "swagger-jsdoc";
 
 const options: swaggerJsdoc.Options = {
 
-    definition: {
+    definition:{
+        openapi:"3.0.0",
 
-        openapi: "3.0.0",
-
-        info: {
-
-            title: "Leña Reserva API",
-
-            version: "1.0.0",
-
-            description: "API del sistema de reservas."
-
+        info:{
+            title:"Leña Reserva API",
+            version:"1.0.0",
+            description:"API del sistema de reservas."
         },
 
-        servers: [
-
+        servers:[
             {
-
-                url: "http://localhost:3000"
-
+                url:"http://localhost:3000"
             }
+        ],
 
-        ]
+        components:{
+            securitySchemes:{
+                bearerAuth:{
+                    type:"http",
+                    scheme:"bearer",
+                    bearerFormat:"JWT"
+                }
+            }
+        }
 
     },
 
-    apis: [
-
+    apis:[
         "./src/routes/*.ts"
-
     ]
 
 };
+
 
 const swaggerSpec = swaggerJsdoc(options);
 

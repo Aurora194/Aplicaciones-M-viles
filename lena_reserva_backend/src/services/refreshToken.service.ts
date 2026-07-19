@@ -1,39 +1,68 @@
 import prisma from "../config/prisma";
 
+
 export async function saveRefreshToken(
-    usuarioId: number,
-    token: string,
-    expiresAt: Date
-) {
+    usuarioId:number,
+    token:string,
+    expiresAt:Date
+){
+
     return prisma.refreshToken.create({
-        data: {
+
+        data:{
             usuarioId,
             token,
             expiresAt
         }
+
     });
+
 }
 
-export async function findRefreshToken(token: string) {
+
+
+export async function findRefreshToken(
+    token:string
+){
+
     return prisma.refreshToken.findUnique({
-        where: {
+
+        where:{
             token
         }
+
     });
+
 }
 
-export async function deleteRefreshToken(token: string) {
+
+
+export async function deleteRefreshToken(
+    token:string
+){
+
     return prisma.refreshToken.delete({
-        where: {
+
+        where:{
             token
         }
+
     });
+
 }
 
-export async function deleteAllUserTokens(usuarioId: number) {
+
+
+export async function deleteAllUserTokens(
+    usuarioId:number
+){
+
     return prisma.refreshToken.deleteMany({
-        where: {
+
+        where:{
             usuarioId
         }
+
     });
+
 }

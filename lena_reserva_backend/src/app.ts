@@ -29,7 +29,7 @@ app.use(morgan('dev'));
 
 app.use("/api/auth", authRoutes);
 
-app.use("/api/usuarios", userRoutes);
+app.use("/api/users", userRoutes);
 
 app.get('/api/health', (req, res) => {
 

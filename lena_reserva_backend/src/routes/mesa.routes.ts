@@ -1,12 +1,9 @@
 import { Router } from "express";
-import * as mesaController from "../controllers/mesa.controller";
+import { controller } from "../controllers/mesa.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { authorizeRole } from "../middleware/role.middleware";
-import { validate } from "../middleware/validate.middleware";
-import { mesaSchema } from "../validations/mesa.validation";
 
 const router = Router();
-
 /**
  * @swagger
  * tags:
@@ -23,6 +20,39 @@ const router = Router();
  *     responses:
  *       200:
  *         description: Lista de mesas disponibles.
+ * parameters:
+  - name: page
+    in: query
+    schema:
+      type: integer
+      example: 1
+
+  - name: limit
+    in: query
+    schema:
+      type: integer
+      example: 10
+
+  - name: search
+    in: query
+    schema:
+      type: string
+      example: "5"
+
+  - name: disponible
+    in: query
+    schema:
+      type: boolean
+      example: true
+
+  - name: order
+    in: query
+    schema:
+      type: string
+      enum:
+        - asc
+        - desc
+      example: asc
  */
 router.get(
     "/disponibles",
@@ -42,10 +72,10 @@ router.get(
  *         description: Lista de mesas.
  */
 router.get(
-    "/",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    mesaController.list
+  "/",
+  authenticateToken,
+  authorizeRole("ADMIN"),
+  controller.getMesas.bind(controller)
 );
 
 /**

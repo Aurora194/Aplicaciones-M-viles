@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import bcrypt from "bcrypt";
+import { Rol } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 
 import {
@@ -11,94 +12,97 @@ verifyRefreshToken
 import * as refreshService from "../services/refreshToken.service";
 
 
-export async function register(req: Request, res: Response) {
+export async function register(req: Request,res: Response){
 
     try {
 
         const {
-
             nombre,
-
             apellido,
-
             correo,
-
             telefono,
-
-            password
-
+            password,
+            rol
         } = req.body;
 
+
         const existe = await prisma.usuario.findUnique({
-
-            where: {
-
+            where:{
                 correo
-
             }
-
         });
 
-        if (existe) {
 
-            return res.status(409).json({
+        if(existe){
 
-                success: false,
+            return res.status(400).json({
 
-                message: "El correo ya está registrado."
+                success:false,
+
+                message:"El correo ya está registrado."
 
             });
 
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
 
-        const usuario = await prisma.usuario.create({
+        const passwordHash =
+            await bcrypt.hash(password,10);
 
-            data: {
 
-                nombre,
 
-                apellido,
+        const usuario =
+            await prisma.usuario.create({
 
-                correo,
+                data:{
 
-                telefono,
+                    nombre,
 
-                password: hashedPassword
+                    apellido,
 
-            }
+                    correo,
 
-        });
+                    telefono,
+
+                    password:passwordHash,
+
+                    rol: rol 
+                    ? Rol[rol as keyof typeof Rol]
+                    : Rol.CLIENTE
+
+                }
+
+            });
+
+
 
         return res.status(201).json({
 
-            success: true,
+            success:true,
 
-            message: "Usuario registrado correctamente.",
+            message:"Usuario creado correctamente",
 
             usuario
 
         });
 
-    }
 
-    catch (error) {
 
-        console.error(error);
+    }catch(error){
+
+        console.error("ERROR REGISTER:",error);
 
         return res.status(500).json({
 
-            success: false,
+            success:false,
 
-            message: "Error interno del servidor."
+            message:"Error interno del servidor."
 
         });
 
     }
 
 }
-
 
 
 export async function login(req: Request, res: Response) {
@@ -191,7 +195,7 @@ export async function login(req: Request, res: Response) {
 
     catch (error) {
 
-        console.error(error);
+        console.error("ERROR COMPLETO:", error);
 
         return res.status(500).json({
 
@@ -246,7 +250,7 @@ export async function logout(req: Request, res: Response) {
 
     catch (error) {
 
-        console.error(error);
+        console.error("ERROR COMPLETO:", error);
 
         return res.status(500).json({
 
@@ -260,7 +264,7 @@ export async function logout(req: Request, res: Response) {
 
 }
 
-export async function refreshToken(
+export async function refresh(
     req: Request,
     res: Response
 ) {
@@ -337,7 +341,7 @@ export async function refreshToken(
 
     catch (error) {
 
-        console.error(error);
+        console.error("ERROR COMPLETO:", error);
 
         return res.status(500).json({
 
