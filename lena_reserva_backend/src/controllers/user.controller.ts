@@ -1,171 +1,95 @@
 import { Request, Response } from "express";
-import * as userService from "../services/user.service";
+import { UserService } from "../services/user.service";
 
-export async function getUsers(req: Request, res: Response) {
+const service = new UserService();
 
+class UserController {
+
+  async getUsers(req: Request, res: Response) {
+    try {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 10;
+      const search = req.query.search as string;
+      const rol = req.query.rol as any;
+
+      const result = await service.getUsers(page, limit, search, rol);
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+
+  async getUserById(req: Request, res: Response) {
     try {
 
-        const {
-            page,
-            limit,
-            search,
-            rol,
-            sortBy,
-            order
-        } = req.query;
+      const id = Number(req.params.id);
 
-        const users = await userService.getUsers({
+      const result = await service.getUserById(id);
 
-            page: Number(page),
-
-            limit: Number(limit),
-
-            search: search as string,
-
-            rol: rol as string,
-
-            sortBy: sortBy as string,
-
-            order: order as "asc" | "desc"
-
-        });
-
-        return res.status(200).json({
-
-            success: true,
-
-            ...users
-
-        });
+      return res.status(200).json(result);
 
     } catch (error) {
 
-        console.error(error);
-
-        return res.status(500).json({
-
-            success: false,
-
-            message: "Error interno del servidor."
-
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado"
+      });
 
     }
+  }
 
-}
-
-export async function getUserById(req: Request, res: Response) {
+  async updateUser(req: Request, res: Response) {
 
     try {
 
-        const id = Number(req.params.id);
+      const id = Number(req.params.id);
 
-        const user = await userService.getUserById(id);
+      const result = await service.updateUser(id, req.body);
 
-        if (!user) {
-
-            return res.status(404).json({
-
-                success: false,
-
-                message: "Usuario no encontrado."
-
-            });
-
-        }
-
-        return res.json({
-
-            success: true,
-
-            user
-
-        });
+      return res.status(200).json(result);
 
     } catch (error) {
 
-        console.error(error);
+      console.error(error);
 
-        return res.status(500).json({
-
-            success: false,
-
-            message: "Error interno."
-
-        });
+      return res.status(500).json({
+        success: false,
+        message: "No fue posible actualizar"
+      });
 
     }
+  }
 
-}
-
-export async function updateUser(req: Request, res: Response) {
+  async deleteUser(req: Request, res: Response) {
 
     try {
 
-        const id = Number(req.params.id);
+      const id = Number(req.params.id);
 
-        const user = await userService.updateUser(
+      const result = await service.deleteUser(id);
 
-            id,
-
-            req.body
-
-        );
-
-        return res.json({
-
-            success: true,
-
-            message: "Usuario actualizado correctamente.",
-
-            user
-
-        });
+      return res.status(200).json(result);
 
     } catch (error) {
 
-        console.error(error);
+      console.error(error);
 
-        return res.status(500).json({
-
-            success: false,
-
-            message: "Error interno."
-
-        });
+      return res.status(500).json({
+        success: false,
+        message: "No fue posible eliminar"
+      });
 
     }
 
-}
-
-export async function deleteUser(req: Request, res: Response) {
-
-    try {
-
-        const id = Number(req.params.id);
-
-        await userService.deleteUser(id);
-
-        return res.json({
-
-            success: true,
-
-            message: "Usuario eliminado correctamente."
-
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        return res.status(500).json({
-
-            success: false,
-
-            message: "Error interno."
-
-        });
-
-    }
+  }
 
 }
+
+export const controller = new UserController();
