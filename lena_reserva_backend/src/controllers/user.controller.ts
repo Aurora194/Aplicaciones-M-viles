@@ -1,126 +1,171 @@
 import { Request, Response } from "express";
-import * as service from "../services/user.service";
-import { success } from "../utils/response";
-import ApiError from "../utils/ApiError";
+import * as userService from "../services/user.service";
 
-export async function listUsers(
+export async function getUsers(req: Request, res: Response) {
 
-req:Request,
+    try {
 
-res:Response
+        const {
+            page,
+            limit,
+            search,
+            rol,
+            sortBy,
+            order
+        } = req.query;
 
-){
+        const users = await userService.getUsers({
 
-    const users=await service.getUsers();
+            page: Number(page),
 
-    res.json(
+            limit: Number(limit),
 
-        success(
+            search: search as string,
 
-            users,
+            rol: rol as string,
 
-            "Usuarios obtenidos correctamente."
+            sortBy: sortBy as string,
 
-        )
+            order: order as "asc" | "desc"
 
-    );
+        });
 
-}
+        return res.status(200).json({
 
-export async function getOne(
+            success: true,
 
-req:Request,
+            ...users
 
-res:Response
+        });
 
-){
+    } catch (error) {
 
-    const user=await service.getUser(
+        console.error(error);
 
-        Number(req.params.id)
+        return res.status(500).json({
 
-    );
+            success: false,
 
-    if(!user){
+            message: "Error interno del servidor."
 
-    throw new ApiError(
-
-        404,
-
-        "Usuario no encontrado."
-
-    );
+        });
 
     }
 
-    res.json(
+}
 
-        success(
+export async function getUserById(req: Request, res: Response) {
 
-            user,
+    try {
 
-            "Usuario obtenido correctamente."
+        const id = Number(req.params.id);
 
-        )
+        const user = await userService.getUserById(id);
 
-    );
+        if (!user) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Usuario no encontrado."
+
+            });
+
+        }
+
+        return res.json({
+
+            success: true,
+
+            user
+
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Error interno."
+
+        });
+
+    }
 
 }
 
-export async function update(
+export async function updateUser(req: Request, res: Response) {
 
-req:Request,
+    try {
 
-res:Response
+        const id = Number(req.params.id);
 
-){
+        const user = await userService.updateUser(
 
-    const user=await service.updateUser(
+            id,
 
-        Number(req.params.id),
+            req.body
 
-        req.body
+        );
 
-    );
+        return res.json({
 
-    res.json(
+            success: true,
 
-        success(
+            message: "Usuario actualizado correctamente.",
 
-            user,
+            user
 
-            "Usuario obtenido correctamente."
+        });
 
-        )
+    } catch (error) {
 
-    );
+        console.error(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Error interno."
+
+        });
+
+    }
 
 }
 
-export async function remove(
+export async function deleteUser(req: Request, res: Response) {
 
-req:Request,
+    try {
 
-res:Response
+        const id = Number(req.params.id);
 
-){
+        await userService.deleteUser(id);
 
-    await service.deleteUser(
+        return res.json({
 
-        Number(req.params.id)
+            success: true,
 
-    );
+            message: "Usuario eliminado correctamente."
 
-    res.json(
+        });
 
-        success(
+    } catch (error) {
 
-            null,
+        console.error(error);
 
-            "Usuario eliminada correctamente."
+        return res.status(500).json({
 
-        )
+            success: false,
 
-    );
+            message: "Error interno."
+
+        });
+
+    }
 
 }

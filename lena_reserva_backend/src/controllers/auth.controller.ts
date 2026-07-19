@@ -1,28 +1,17 @@
 import { Request, Response } from "express";
+import bcrypt from "bcrypt";
+import prisma from "../config/prisma";
 
 import {
-    createUser,
-    findUserByEmail
-} from "../services/auth.service";
+generateAccessToken,
+generateRefreshToken,
+verifyRefreshToken
+} from "../utils/jwt";
 
-import {
-    hashPassword,
-    comparePassword
-} from "../utils/password";
+import * as refreshService from "../services/refreshToken.service";
 
-import { generateAccessToken } from "../utils/jwt";
 
-import { success } from "../utils/response";
-
-import ApiError from "../utils/ApiError";
-
-export async function register(
-
-    req: Request,
-
-    res: Response
-
-) {
+export async function register(req: Request, res: Response) {
 
     try {
 
@@ -40,61 +29,63 @@ export async function register(
 
         } = req.body;
 
-        const userExists = await findUserByEmail(correo);
+        const existe = await prisma.usuario.findUnique({
 
-        if (userExists) {
+            where: {
 
-            throw new ApiError(
+                correo
 
-                409,
-
-                "El correo ya está registrado."
-
-            );
-
-        }
-
-        const hashedPassword = await hashPassword(password);
-
-        const user = await createUser({
-
-            nombre,
-
-            apellido,
-
-            correo,
-
-            telefono,
-
-            password: hashedPassword
+            }
 
         });
 
-        res.status(201).json(
+        if (existe) {
 
-            success(
-
-                user,
-
-                "Usuario registrado correctamente."
-
-            )
-
-        );
-
-    } catch (error: any) {
-
-        if (error instanceof ApiError) {
-
-            return res.status(error.statusCode).json({
+            return res.status(409).json({
 
                 success: false,
 
-                message: error.message
+                message: "El correo ya está registrado."
 
             });
 
         }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const usuario = await prisma.usuario.create({
+
+            data: {
+
+                nombre,
+
+                apellido,
+
+                correo,
+
+                telefono,
+
+                password: hashedPassword
+
+            }
+
+        });
+
+        return res.status(201).json({
+
+            success: true,
+
+            message: "Usuario registrado correctamente.",
+
+            usuario
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
 
         return res.status(500).json({
 
@@ -108,13 +99,9 @@ export async function register(
 
 }
 
-export async function login(
 
-    req: Request,
 
-    res: Response
-
-) {
+export async function login(req: Request, res: Response) {
 
     try {
 
@@ -126,89 +113,237 @@ export async function login(
 
         } = req.body;
 
-        const user = await findUserByEmail(correo);
+        const usuario = await prisma.usuario.findUnique({
 
-        if (!user) {
+            where: {
 
-            throw new ApiError(
+                correo
 
-                401,
+            }
 
-                "Credenciales incorrectas."
+        });
 
-            );
+        if (!usuario) {
 
-        }
-
-        const validPassword = await comparePassword(
-
-            password,
-
-            user.password
-
-        );
-
-        if (!validPassword) {
-
-            throw new ApiError(
-
-                401,
-
-                "Credenciales incorrectas."
-
-            );
-
-        }
-
-        const token = generateAccessToken(user);
-
-        res.status(200).json(
-
-            success(
-
-                {
-
-                    token,
-
-                    usuario: {
-
-                        id: user.id,
-
-                        nombre: user.nombre,
-
-                        correo: user.correo,
-
-                        rol: user.rol
-
-                    }
-
-                },
-
-                "Inicio de sesión exitoso."
-
-            )
-
-        );
-
-    } catch (error: any) {
-
-        if (error instanceof ApiError) {
-
-            return res.status(error.statusCode).json({
+            return res.status(401).json({
 
                 success: false,
 
-                message: error.message
+                message: "Correo o contraseña incorrectos."
 
             });
 
         }
+
+        const match = await bcrypt.compare(
+
+            password,
+
+            usuario.password
+
+        );
+
+        if (!match) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Correo o contraseña incorrectos."
+
+            });
+
+        }
+
+        const accessToken = generateAccessToken(usuario);
+
+        const refreshToken = generateRefreshToken(usuario);
+
+        const expiresAt = new Date();
+
+        expiresAt.setDate(
+
+            expiresAt.getDate() + 7
+
+        );
+
+        await refreshService.saveRefreshToken(
+
+            usuario.id,
+
+            refreshToken,
+
+            expiresAt
+
+        );
+
+        return res.status(200).json({
+
+            success: true,
+
+            accessToken,
+
+            refreshToken
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
 
         return res.status(500).json({
 
             success: false,
 
             message: "Error interno del servidor."
+
+        });
+
+    }
+
+}
+
+
+export async function logout(req: Request, res: Response) {
+
+    try {
+
+        const {
+
+            refreshToken
+
+        } = req.body;
+
+        if (!refreshToken) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Refresh Token requerido."
+
+            });
+
+        }
+
+        await refreshService.deleteRefreshToken(
+
+            refreshToken
+
+        );
+
+        return res.status(200).json({
+
+            success: true,
+
+            message: "Sesión cerrada correctamente."
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Error interno del servidor."
+
+        });
+
+    }
+
+}
+
+export async function refreshToken(
+    req: Request,
+    res: Response
+) {
+    try {
+
+        const { refreshToken } = req.body;
+
+        if (!refreshToken) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Refresh Token requerido."
+            });
+
+        }
+
+        const stored =
+            await refreshService.findRefreshToken(refreshToken);
+
+        if (!stored) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Refresh Token inválido."
+            });
+
+        }
+
+        if (stored.expiresAt < new Date()) {
+
+            await refreshService.deleteRefreshToken(refreshToken);
+
+            return res.status(401).json({
+                success: false,
+                message: "Refresh Token expirado."
+            });
+
+        }
+
+        const usuario = await prisma.usuario.findUnique({
+
+            where: {
+
+                id: stored.usuarioId
+
+            }
+
+        });
+
+        if (!usuario) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Usuario no encontrado."
+
+            });
+
+        }
+
+        const accessToken =
+            generateAccessToken(usuario);
+
+        return res.json({
+
+            success: true,
+
+            accessToken
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: "Error interno."
 
         });
 

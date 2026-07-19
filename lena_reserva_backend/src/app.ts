@@ -11,6 +11,16 @@ import swaggerSpec from "./docs/swagger";
 
 const app = express();
 
+app.get("/", (req, res) => {
+    res.json({
+        success: true,
+        message: "🚀 Bienvenido a Leña Reserva API",
+        version: "1.0.0",
+        docs: "http://localhost:3000/api/docs",
+        health: "http://localhost:3000/api/health"
+    });
+});
+
 app.use(cors());
 
 app.use(express.json());
