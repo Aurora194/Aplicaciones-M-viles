@@ -1,171 +1,218 @@
 import { Request, Response } from "express";
-import * as service from "../services/reserva.service";
-import {sendReservationNotification } from "../jobs/reservation.job";
-import { success } from "../utils/response";
-import ApiError from "../utils/ApiError";
+import { ReservaService } from "../services/reserva.service";
+import { logger } from "../config/logger";
 
-export async function list(
 
-req:Request,
-
-res:Response
-
-){
-
-    const reservas=await service.getReservas();
-
-    res.json(reservas);
-
-}
-
-export async function create(
-
-req:Request,
-
-res:Response
-
-){
-
-    const existe=await service.mesaDisponible(
-
-        req.body.mesaId,
-
-        new Date(req.body.fecha)
-
-    );
-
-    if(existe){
-
-        return res.status(409).json({
-
-            success:false,
-
-            message:"La mesa ya posee una reserva para esa fecha."
-
-        });
-
-    }
-
-    const reserva=await service.createReserva(req.body);
-
-    res.status(201).json(
-
-    success(
-
-        reserva,
-
-        "Reserva creada correctamente."
-
-        )
-
-    );
-
-    await sendReservationNotification(
-
-    reserva
-
-    );
-
-}
+const service = new ReservaService();
 
 
 
-export async function getOne(
+    class ReservaController {
 
-req:Request,
 
-res:Response
 
-){
+    async getReservas(req:Request,res:Response){
 
-    const reserva=await service.getReserva(
 
-        Number(req.params.id)
+        try{
 
-    );
 
-    if(!reserva){
+        const result = await service.getReservas(
 
-        throw new ApiError(
+        Number(req.query.page)||1,
 
-            404,
+        Number(req.query.limit)||10,
 
-            "Reserva no encontrada."
+        req.query.cliente as string,
+
+        req.query.mesa ? Number(req.query.mesa):undefined,
+
+        req.query.fecha as string,
+
+        req.query.estado as any,
+
+        (req.query.order as "asc"|"desc") || "asc"
 
         );
 
+
+
+        return res.json(result);
+
+
+
+        }catch(error:any){
+
+
+        return res.status(500).json({
+
+        success:false,
+
+        message:error.message
+
+        });
+
+
     }
 
-    res.json(
 
-        success(
+    }
 
-            reserva,
 
-            "Reserva obtenida correctamente."
 
-        )
 
-    );
 
-}
+    async getOne(req:Request,res:Response){
 
-export async function update(
 
-req:Request,
+        try{
 
-res:Response
 
-){
+        const result = await service.getOne(
 
-    const reserva=await service.updateReserva(
+        Number(req.params.id)
+
+        );
+
+
+        return res.json(result);
+
+
+        }catch(error:any){
+
+
+        return res.status(404).json({
+
+        success:false,
+
+        message:error.message
+
+        });
+
+
+    }
+
+
+    }
+
+
+
+
+
+    async create(req:Request,res:Response){
+
+
+        try{
+
+
+        const result = await service.create(req.body);
+
+
+
+        return res.status(201).json(result);
+
+
+
+        }catch(error:any){
+
+
+        return res.status(400).json({
+
+        success:false,
+
+        message:error.message
+
+        });
+
+
+    }
+
+
+    }
+
+
+
+
+
+    async update(req:Request,res:Response){
+
+
+        try{
+
+
+        const result = await service.update(
 
         Number(req.params.id),
 
         req.body
 
-    );
+        );
 
-    res.json(
 
-    success(
 
-        reserva,
+        return res.json(result);
 
-        "Reserva actualizada correctamente."
 
-    )
 
-);
+        }catch(error:any){
 
-}
 
-export async function remove(
+        return res.status(400).json({
 
-req:Request,
+        success:false,
 
-res:Response
+        message:error.message
 
-){
+        });
 
-    await service.deleteReserva(
+
+    }
+
+
+    }
+
+
+
+
+
+    async remove(req:Request,res:Response){
+
+
+        try{
+
+
+        const result = await service.remove(
 
         Number(req.params.id)
 
-    );
+        );
 
-    res.json(
 
-        success(
 
-            null,
+        return res.json(result);
 
-            "Reserva eliminada correctamente."
 
-        )
 
-    );
+        }catch(error:any){
 
-    
 
-}
+        return res.status(400).json({
+
+        success:false,
+
+        message:error.message
+
+        });
+
+
+    }
+
+
+    }
+
+
+    }
+
+
+
+export const controller = new ReservaController();

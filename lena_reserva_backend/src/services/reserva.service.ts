@@ -1,140 +1,381 @@
-import prisma from "../config/prisma";
-import {
+import { PrismaClient, EstadoReserva } from "@prisma/client";
 
-getCache,
+const prisma = new PrismaClient();
 
-setCache,
+export class ReservaService {
 
-deleteCache
+    async getReservas(
+        page: number,
+        limit: number,
+        cliente?: string,
+        mesa?: number,
+        fecha?: string,
+        estado?: EstadoReserva,
+        order: "asc" | "desc" = "asc"
+    ) {
 
-} from "./cache.service";
+        const skip = (page - 1) * limit;
 
-export async function getReservas(){
+        const where: any = {};
 
-    const cache=await getCache("reservas");
+        if (cliente) {
 
-    if(cache){
+            where.usuario = {
 
-        console.log("CACHE");
+                OR: [
+                    {
+                        nombre: {
+                            contains: cliente
+                        }
+                    },
+                    {
+                        apellido: {
+                            contains: cliente
+                        }
+                    },
+                    {
+                        correo: {
+                            contains: cliente
+                        }
+                    }
+                ]
 
-        return cache;
+            };
+
+        }
+
+
+        if (mesa) {
+
+            where.mesaId = mesa;
+
+        }
+
+
+        if (fecha) {
+
+            const inicio = new Date(fecha);
+
+            const fin = new Date(fecha);
+
+            fin.setDate(fin.getDate() + 1);
+
+
+            where.fecha = {
+
+                gte: inicio,
+
+                lt: fin
+
+            };
+
+        }
+
+
+        if (estado) {
+
+            where.estado = estado;
+
+        }
+
+
+        const total = await prisma.reserva.count({
+            where
+        });
+
+
+        const reservas = await prisma.reserva.findMany({
+
+            where,
+
+            include: {
+
+                usuario: {
+
+                    select:{
+                        id:true,
+                        nombre:true,
+                        apellido:true,
+                        correo:true
+                    }
+
+                },
+
+                mesa:{
+                    select:{
+                        id:true,
+                        numero:true,
+                        capacidad:true
+                    }
+                }
+
+            },
+
+            skip,
+
+            take:limit,
+
+            orderBy:{
+                fecha:order
+            }
+
+        });
+
+
+        return {
+
+            success:true,
+
+            message:"Lista de reservas",
+
+            data:reservas,
+
+            pagination:{
+                page,
+                limit,
+                total,
+                totalPages:Math.ceil(total / limit)
+            }
+
+        };
 
     }
 
-    console.log("MYSQL");
 
-    const reservas=await prisma.reserva.findMany({
 
-        include:{
+    async getOne(id:number){
 
-            usuario:true,
 
-            mesa:true
+        const reserva = await prisma.reserva.findUnique({
 
-        }
+            where:{
+                id
+            },
 
-    });
+            include:{
+                usuario:true,
+                mesa:true
+            }
 
-    await setCache(
+        });
 
-        "reservas",
 
-        reservas,
+        if(!reserva){
 
-        60
-
-    );
-
-    return reservas;
-
-}
-
-export function getReserva(id:number){
-
-    return prisma.reserva.findUnique({
-
-        where:{id},
-
-        include:{
-
-            usuario:true,
-
-            mesa:true
+            throw new Error("Reserva no encontrada");
 
         }
 
-    });
 
-}
+        return {
 
-export async function createReserva(data:any){
+            success:true,
 
-    const reserva = await prisma.reserva.create({
+            data:reserva
 
-        data
+        };
 
-    });
 
-    await deleteCache("reservas");
+    }
 
-    return reserva;
 
-}
 
-export async function updateReserva(
 
-    id:number,
+    async create(data:any){
 
-    data:any
 
-){
+        const usuario = await prisma.usuario.findUnique({
 
-    const reserva = await prisma.reserva.update({
+            where:{
+                id:data.usuarioId
+            }
 
-        where:{id},
+        });
 
-        data
 
-    });
+        if(!usuario){
 
-    await deleteCache("reservas");
-
-    return reserva;
-
-}
-
-export async function deleteReserva(id:number){
-
-    const reserva = await prisma.reserva.delete({
-
-        where:{id}
-
-    });
-
-    await deleteCache("reservas");
-
-    return reserva;
-
-}
-
-export async function mesaDisponible(
-
-    mesaId:number,
-
-    fecha:Date
-
-){
-
-    return prisma.reserva.findFirst({
-
-        where:{
-
-            mesaId,
-
-            fecha
+            throw new Error("Usuario no existe");
 
         }
 
-    });
+
+
+        const mesa = await prisma.mesa.findUnique({
+
+            where:{
+                id:data.mesaId
+            }
+
+        });
+
+
+        if(!mesa){
+
+            throw new Error("Mesa no existe");
+
+        }
+
+
+
+        if(!mesa.disponible){
+
+            throw new Error("Mesa no disponible");
+
+        }
+
+
+
+        const reserva = await prisma.reserva.create({
+
+            data,
+
+            include:{
+                usuario:true,
+                mesa:true
+            }
+
+        });
+
+
+
+        await prisma.mesa.update({
+
+            where:{
+                id:data.mesaId
+            },
+
+            data:{
+                disponible:false
+            }
+
+        });
+
+
+        return {
+
+            success:true,
+
+            message:"Reserva creada correctamente",
+
+            data:reserva
+
+        };
+
+
+    }
+
+
+
+
+
+    async update(id:number,data:any){
+
+
+        const existe = await prisma.reserva.findUnique({
+
+            where:{
+                id
+            }
+
+        });
+
+
+        if(!existe){
+
+            throw new Error("Reserva no encontrada");
+
+        }
+
+
+
+        const reserva = await prisma.reserva.update({
+
+            where:{
+                id
+            },
+
+            data,
+
+            include:{
+                usuario:true,
+                mesa:true
+            }
+
+        });
+
+
+
+        return {
+
+            success:true,
+
+            message:"Reserva actualizada",
+
+            data:reserva
+
+        };
+
+
+    }
+
+
+
+
+
+    async remove(id:number){
+
+
+        const reserva = await prisma.reserva.findUnique({
+
+            where:{
+                id
+            }
+
+        });
+
+
+        if(!reserva){
+
+            throw new Error("Reserva no encontrada");
+
+        }
+
+
+
+        await prisma.reserva.delete({
+
+            where:{
+                id
+            }
+
+        });
+
+
+
+        await prisma.mesa.update({
+
+            where:{
+                id:reserva.mesaId
+            },
+
+            data:{
+                disponible:true
+            }
+
+        });
+
+
+
+        return {
+
+            success:true,
+
+            message:"Reserva eliminada correctamente"
+
+        };
+
+
+    }
 
 }

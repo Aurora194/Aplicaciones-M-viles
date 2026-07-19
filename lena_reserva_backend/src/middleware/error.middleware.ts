@@ -1,31 +1,32 @@
-import { Request, Response, NextFunction } from "express";
+import {Request,Response,NextFunction} from "express";
 
-import logger from "../utils/logger";
 
-export function errorHandler(
+    export const errorMiddleware=(
 
-err:any,
+        err:any,
 
-req:Request,
+        req:Request,
 
-res:Response,
+        res:Response,
 
-next:NextFunction
+        next:NextFunction
 
-){
+        )=>{
 
-    logger.error(err.message);
 
-    return res.status(
+    console.error(err);
 
-        err.statusCode||500
 
-    ).json({
+
+    res.status(err.status || 500)
+        .json({
 
         success:false,
 
-        message:err.message||"Error interno del servidor"
+        message:err.message || 
+        "Error interno del servidor"
 
-    });
+        });
 
-}
+
+};
