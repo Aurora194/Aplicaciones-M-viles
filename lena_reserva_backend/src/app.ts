@@ -8,8 +8,15 @@ import reservaRoutes from "./routes/reserva.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./docs/swagger";
+import helmet from "helmet";
+import compression from "compression";
+import { limiter } from "./middleware/rateLimit.middleware";
+import {swaggerSpec,swaggerUi}from "./config/swagger";
+
+
 
 const app = express();
+
 
 app.get("/", (req, res) => {
     res.json({
@@ -23,7 +30,13 @@ app.get("/", (req, res) => {
 
 app.use(cors());
 
+app.use(helmet()); 
+
+app.use(compression());
+
 app.use(express.json());
+
+app.use(limiter);
 
 app.use(morgan('dev'));
 
@@ -49,7 +62,7 @@ app.use("/api/reservas",reservaRoutes);
 
 app.use(
 
-    "/api/docs",
+    "/api-docs",
 
     swaggerUi.serve,
 
@@ -58,5 +71,7 @@ app.use(
 );
 
 app.use(errorHandler);
+
+app.use(errorMiddleware);
 
 export default app;

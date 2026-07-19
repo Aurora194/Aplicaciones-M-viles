@@ -1,0 +1,22 @@
+{
+ "info":{
+    "name":"Lena Reserva Backend API",
+    "_postman_id":"lena-reserva-api",
+    "schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+
+ "variable":[
+    {
+      "key":"base_url",
+      "value":"http://localhost:3000/api/docs/#"
+    },
+    {
+      "key":"token",
+      "value":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwiY29ycmVvIjoiYWRtaW5AbGVuYS5jb20iLCJyb2wiOiJBRE1JTiIsImlhdCI6MTc4NDQ3OTk4MSwiZXhwIjoxNzg0NDgzNTgxfQ.-ZaBbYeMZE-3o1R53GqcT1VSY5MEvgiEWi3mpYCa5Sc"
+    }
+ ],
+
+ "item":[
+
+ ]
+}

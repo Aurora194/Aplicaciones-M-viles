@@ -4,11 +4,12 @@ import { authenticateToken } from "../middleware/auth.middleware";
 import { authorizeRole } from "../middleware/role.middleware";
 
 const router = Router();
+
 /**
  * @swagger
  * tags:
- *   name: Mesas
- *   description: Gestión de mesas del restaurante
+ *   - name: Mesas
+ *     description: Gestión de mesas del restaurante
  */
 
 /**
@@ -17,46 +18,41 @@ const router = Router();
  *   get:
  *     summary: Obtener mesas disponibles
  *     tags: [Mesas]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Número de mesa
+ *       - in: query
+ *         name: disponible
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - asc
+ *             - desc
+ *           default: asc
  *     responses:
  *       200:
  *         description: Lista de mesas disponibles.
- * parameters:
-  - name: page
-    in: query
-    schema:
-      type: integer
-      example: 1
-
-  - name: limit
-    in: query
-    schema:
-      type: integer
-      example: 10
-
-  - name: search
-    in: query
-    schema:
-      type: string
-      example: "5"
-
-  - name: disponible
-    in: query
-    schema:
-      type: boolean
-      example: true
-
-  - name: order
-    in: query
-    schema:
-      type: string
-      enum:
-        - asc
-        - desc
-      example: asc
  */
 router.get(
-    "/disponibles",
-    mesaController.disponibles
+  "/disponibles",
+  controller.disponibles.bind(controller)
 );
 
 /**
@@ -67,9 +63,39 @@ router.get(
  *     tags: [Mesas]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Número de mesa
+ *       - in: query
+ *         name: disponible
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - asc
+ *             - desc
+ *           default: asc
  *     responses:
  *       200:
- *         description: Lista de mesas.
+ *         description: Lista de mesas obtenida correctamente.
+ *       401:
+ *         description: Token inválido o inexistente.
  */
 router.get(
   "/",
@@ -97,12 +123,14 @@ router.get(
  *         description: Mesa encontrada.
  *       404:
  *         description: Mesa no encontrada.
+ *       401:
+ *         description: Token inválido.
  */
 router.get(
-    "/:id",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    mesaController.getOne
+  "/:id",
+  authenticateToken,
+  authorizeRole("ADMIN"),
+  controller.getOne.bind(controller)
 );
 
 /**
@@ -135,13 +163,16 @@ router.get(
  *     responses:
  *       201:
  *         description: Mesa creada correctamente.
+ *       400:
+ *         description: Error de validación.
+ *       401:
+ *         description: Token inválido.
  */
 router.post(
-    "/",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    validate(mesaSchema),
-    mesaController.create
+  "/",
+  authenticateToken,
+  authorizeRole("ADMIN"),
+  controller.create.bind(controller)
 );
 
 /**
@@ -158,16 +189,37 @@ router.post(
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero:
+ *                 type: integer
+ *                 example: 8
+ *               capacidad:
+ *                 type: integer
+ *                 example: 6
+ *               disponible:
+ *                 type: boolean
+ *                 example: true
  *     responses:
  *       200:
- *         description: Mesa actualizada.
+ *         description: Mesa actualizada correctamente.
+ *       400:
+ *         description: Error de validación.
+ *       404:
+ *         description: Mesa no encontrada.
+ *       401:
+ *         description: Token inválido.
  */
 router.put(
-    "/:id",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    validate(mesaSchema),
-    mesaController.update
+  "/:id",
+  authenticateToken,
+  authorizeRole("ADMIN"),
+  controller.update.bind(controller)
 );
 
 /**
@@ -186,13 +238,17 @@ router.put(
  *           type: integer
  *     responses:
  *       200:
- *         description: Mesa eliminada.
+ *         description: Mesa eliminada correctamente.
+ *       404:
+ *         description: Mesa no encontrada.
+ *       401:
+ *         description: Token inválido.
  */
 router.delete(
-    "/:id",
-    authenticateToken,
-    authorizeRole("ADMIN"),
-    mesaController.remove
+  "/:id",
+  authenticateToken,
+  authorizeRole("ADMIN"),
+  controller.remove.bind(controller)
 );
 
 export default router;
