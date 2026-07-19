@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { UserService } from "../services/user.service";
+import { logger } from "../config/logger";
 
 const service = new UserService();
 
@@ -7,6 +8,7 @@ class UserController {
 
   async getUsers(req: Request, res: Response) {
     try {
+      logger.info("Consulta de usuarios");
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 10;
       const search = req.query.search as string;
@@ -48,8 +50,9 @@ class UserController {
   async updateUser(req: Request, res: Response) {
 
     try {
-
       const id = Number(req.params.id);
+
+      logger.info(`Usuario ${id} actualizado`);
 
       const result = await service.updateUser(id, req.body);
 
@@ -69,26 +72,28 @@ class UserController {
 
   async deleteUser(req: Request, res: Response) {
 
-    try {
+  try {
 
-      const id = Number(req.params.id);
+    const id = Number(req.params.id);
 
-      const result = await service.deleteUser(id);
+    const result = await service.deleteUser(id);
 
-      return res.status(200).json(result);
+    logger.info(`Usuario ${id} eliminado correctamente`);
 
-    } catch (error) {
+    return res.status(200).json(result);
 
-      console.error(error);
+  } catch (error) {
 
-      return res.status(500).json({
-        success: false,
-        message: "No fue posible eliminar"
-      });
+    logger.error(error);
 
-    }
+    return res.status(500).json({
+      success: false,
+      message: "No fue posible eliminar"
+    });
 
   }
+
+}
 
 }
 

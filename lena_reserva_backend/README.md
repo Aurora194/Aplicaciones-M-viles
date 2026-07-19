@@ -21,7 +21,7 @@ API REST para gestión de reservas.
 
 Clonar proyecto:
 
-git clone URL
+[git clone URL](https://github.com/Aurora194/Aplicaciones-M-viles.git)
 
 
 Instalar dependencias:
