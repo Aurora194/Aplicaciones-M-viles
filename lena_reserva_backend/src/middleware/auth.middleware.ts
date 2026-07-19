@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-
-const SECRET = process.env.JWT_SECRET || "lena_reserva_secret";
+import { verifyAccessToken } from "../utils/jwt";
 
 export function authenticateToken(
     req: Request,
@@ -14,8 +12,11 @@ export function authenticateToken(
     if (!authHeader) {
 
         return res.status(401).json({
+
             success: false,
-            message: "Token no proporcionado."
+
+            message: "Token requerido."
+
         });
 
     }
@@ -24,21 +25,20 @@ export function authenticateToken(
 
     try {
 
-        const payload = jwt.verify(token, SECRET) as any;
+        const decoded = verifyAccessToken(token);
 
-        req.user = {
-            id: payload.id,
-            correo: payload.correo,
-            rol: payload.rol
-        };
+        (req as any).user = decoded;
 
         next();
 
     } catch {
 
         return res.status(401).json({
+
             success: false,
+
             message: "Token inválido."
+
         });
 
     }

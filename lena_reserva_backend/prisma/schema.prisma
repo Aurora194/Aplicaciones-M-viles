@@ -8,25 +8,23 @@ datasource db {
 }
 
 model Usuario {
+  id         Int       @id @default(autoincrement())
+  nombre     String
+  apellido   String
+  correo     String    @unique
+  telefono   String
+  password   String
+  rol        Rol       @default(CLIENTE)
 
-  id          Int      @id @default(autoincrement())
+  createdAt  DateTime  @default(now())
 
-  nombre      String
+  updatedAt  DateTime  @updatedAt
 
-  apellido    String
+  deletedAt  DateTime?
 
-  correo      String   @unique
+  reservas   Reserva[]
 
-  telefono    String
-
-  password    String
-
-  rol         Rol      @default(CLIENTE)
-
-  reservas    Reserva[]
-
-  createdAt   DateTime @default(now())
-
+  refreshTokens RefreshToken[]
 }
 
 model Mesa {
@@ -62,6 +60,22 @@ model Reserva {
   mesa            Mesa @relation(fields:[mesaId], references:[id])
 
   createdAt       DateTime @default(now())
+
+}
+
+model RefreshToken {
+
+  id         Int      @id @default(autoincrement())
+
+  token      String   @unique
+
+  usuarioId  Int
+
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  expiresAt  DateTime
+
+  createdAt  DateTime @default(now())
 
 }
 
