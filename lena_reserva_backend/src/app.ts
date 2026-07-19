@@ -63,7 +63,7 @@ app.use("/api/reservas",reservaRoutes);
 
 app.use(
 
-    "/api-docs",
+    "/api/docs",
 
     swaggerUi.serve,
 
