@@ -1,17 +1,18 @@
-import express from 'express';
-import cors from 'cors';
-import morgan from 'morgan';
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import helmet from "helmet";
+import compression from "compression";
+
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import mesaRoutes from "./routes/mesa.routes";
 import reservaRoutes from "./routes/reserva.routes";
-import { errorHandler } from "./middleware/error.middleware";
+
 import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./docs/swagger";
-import helmet from "helmet";
-import compression from "compression";
+import { swaggerSpec } from "./docs/swagger";
+
 import { limiter } from "./middleware/rateLimit.middleware";
-import {swaggerSpec,swaggerUi}from "./config/swagger";
 
 
 
@@ -70,8 +71,5 @@ app.use(
 
 );
 
-app.use(errorHandler);
-
-app.use(errorMiddleware);
 
 export default app;

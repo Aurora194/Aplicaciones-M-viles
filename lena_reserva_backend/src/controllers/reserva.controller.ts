@@ -16,6 +16,7 @@ const service = new ReservaService();
 
         try{
 
+        logger.info("Consulta de reservas realizada");
 
         const result = await service.getReservas(
 
@@ -104,13 +105,11 @@ const service = new ReservaService();
 
         try{
 
-
         const result = await service.create(req.body);
 
-
+        logger.info(`Reserva ${result.data.id} creada correctamente`);
 
         return res.status(201).json(result);
-
 
 
         }catch(error:any){
@@ -139,6 +138,7 @@ const service = new ReservaService();
 
         try{
 
+        logger.info(`Actualizando reserva ${req.params.id}`);
 
         const result = await service.update(
 
@@ -180,6 +180,7 @@ const service = new ReservaService();
 
         try{
 
+        logger.info(`Eliminando reserva ${req.params.id}`);
 
         const result = await service.remove(
 

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { MesaService } from "../services/mesa.service";
+import { logger } from "../config/logger";
 
 const service = new MesaService();
 
@@ -8,6 +9,7 @@ class MesaController {
   async getMesas(req: Request, res: Response) {
 
     try {
+      logger.info("Consulta de mesas");
 
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 10;
@@ -82,6 +84,7 @@ class MesaController {
   async create(req: Request, res: Response) {
 
     try {
+      logger.info("Mesa creada");
 
       const result = await service.createMesa(req.body);
 
@@ -124,6 +127,7 @@ class MesaController {
   async remove(req: Request, res: Response) {
 
     try {
+      logger.info("Mesa eliminada");
 
       const id = Number(req.params.id);
 
