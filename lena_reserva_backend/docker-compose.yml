@@ -1,31 +1,37 @@
-version: "3.9"
-
 services:
 
   mysql:
-
     image: mysql:8
-
-    container_name: lena_mysql
-
+    container_name: lena_reserva_mysql
     restart: always
-
     environment:
-
       MYSQL_ROOT_PASSWORD: password
-
       MYSQL_DATABASE: lena_reserva
-
     ports:
-
-      - "3306:3306"
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   redis:
-
     image: redis:latest
-
     container_name: lena_redis
-
+    restart: always
     ports:
-
       - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lena_reserva_api
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.production
+    depends_on:
+      - mysql
+      - redis
+
+volumes:
+  mysql_data:
