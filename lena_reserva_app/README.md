@@ -15,6 +15,11 @@ Aplicación móvil para gestionar reservas del restaurante **Leña Steak House**
 * **Dispositivo:** Android Emulator
 * **Android:** 17 (API 37)
 * **ID:** `emulator-5554`
+* **Build Tools:** 37.0.0
+* **Android Emulator:** 37.1.11.0
+* **Dispositivo:** sdk gphone16k x86 64
+
+
 
 ## Backend
 
