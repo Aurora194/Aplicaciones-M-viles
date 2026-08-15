@@ -8,16 +8,12 @@ class ApiService {
   );
 
   static Future<Map<String, dynamic>> healthCheck() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/health'),
-    );
+    final response = await http.get(Uri.parse('$baseUrl/api/health'));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     }
 
-    throw Exception(
-      'Error del servidor: ${response.statusCode}',
-    );
+    throw Exception('Error del servidor: ${response.statusCode}');
   }
 }
