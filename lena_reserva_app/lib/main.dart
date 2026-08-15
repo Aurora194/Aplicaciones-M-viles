@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
+import 'login_page.dart';
 
 void main() {
   runApp(const LenaReservaApp());
@@ -13,7 +14,7 @@ class LenaReservaApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Leña Reserva',
-      home: const HealthPage(),
+      home: const LoginPage(),
     );
   }
 }
