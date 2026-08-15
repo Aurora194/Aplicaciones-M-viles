@@ -1,0 +1,8 @@
+{
+  "name": "lena_reserva_app",
+  "private": true,
+  "scripts": {
+    "android": "flutter pub get && flutter run",
+    "android:run": "flutter pub get && flutter build apk --release && flutter install"
+  }
+}
