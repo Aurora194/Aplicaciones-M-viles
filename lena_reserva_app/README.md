@@ -100,6 +100,42 @@ docker compose down
 ✅ APK compilado
 ✅ Aplicación ejecutada correctamente
 
+## Sistema de diseño y componentes
+
+Se implementó un sistema de diseño reutilizable con tokens y un conjunto de widgets base para la app:
+
+- `lib/theme/app_colors.dart`: colores semánticos y brand tokens.
+- `lib/theme/app_spacing.dart`: espaciado base del sistema.
+- `lib/theme/app_radius.dart`: radios y forma visual consistente.
+- `lib/theme/app_theme.dart`: tema global de la aplicación.
+- `lib/widgets/app_button.dart`: boton reutilizable con loading y accesibilidad.
+- `lib/widgets/app_text_field.dart`: campo de texto con validación y semántica.
+- `lib/widgets/reservation_card.dart`: tarjeta de reserva accesible y visualmente consistente.
+- `lib/widgets/reservation_list.dart`: estados `LOADING`, `EMPTY`, `ERROR` y `SUCCESS`.
+
+### Integración en una pantalla real
+La pantalla de login y la pantalla de dashboard incorporan el sistema de diseño y los nuevos componentes. La dashboard muestra un listado realista con reservas, una cabecera resumen y respuestas adaptables a diferentes tamaños de pantalla.
+
+### Accesibilidad
+Se agregaron `Semantics` y `tooltip` para que los controles sean más comprensibles para usuarios con asistencia técnica. Los campos y acciones tienen etiqueta semántica y el botón de inicio de sesión cuenta con estado de carga.
+
+### Pruebas en diferentes tamaños
+La interfaz se adapta con `LayoutBuilder` y `MediaQuery.sizeOf(context)` para que la dashboard funcione bien en pantallas pequeñas y medianas. En tamaños compactos, los bloques se reorganizan sin romper el diseño.
+
+## Evidencias
+
+### Comandos ejecutados
+```bash
+flutter clean
+flutter pub get
+yarn android
+```
+
+### Resultado esperado
+- App compilando en el emulador Android.
+- Pantalla de login con diseño modular y consistente.
+- Redirección hacia una dashboard con listado de reservas.
+
 ## Autor
 
 Aurora Vargas

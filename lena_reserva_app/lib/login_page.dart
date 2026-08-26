@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
-import 'services/api_service.dart';
 import 'dashboard_page.dart';
+import 'design/app_colors.dart';
+import 'design/app_radius.dart';
+import 'design/app_spacing.dart';
+import 'services/api_service.dart';
+import 'widgets/app_button.dart';
+import 'widgets/app_text_field.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,7 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   bool _loading = false;
-  bool _obscure = true;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -23,46 +28,43 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String _friendlyError(Object e) {
-    final msg = e.toString();
-    // Si el backend devolvió HTML, devolver un mensaje más legible
-    if (msg.contains('<!DOCTYPE') || msg.contains('<html')) {
+  String _friendlyError(Object error) {
+    final message = error.toString();
+    if (message.contains('<!DOCTYPE') || message.contains('<html')) {
       return 'Error del servidor: respuesta inesperada.';
     }
-    return msg.replaceAll('Exception: ', '');
+    return message.replaceAll('Exception: ', '').replaceAll('Login fallido: ', '');
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     final user = _userController.text.trim();
-    final pass = _passController.text;
+    final password = _passController.text;
 
     setState(() => _loading = true);
 
     try {
-      final result = await ApiService.login(user, pass);
-      // Si el backend devuelve accessToken lo consideramos éxito
-      if (result.containsKey('accessToken')) {
-        // TODO: almacenar tokens si se desea
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DashboardPage()),
-        );
-      } else if (result['success'] == true) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DashboardPage()),
-        );
-      } else {
-        throw Exception('Login fallido');
+      final result = await ApiService.login(user, password);
+      final hasAccessToken = result.containsKey('accessToken');
+      final success = result['success'] == true || hasAccessToken;
+
+      if (!success) {
+        throw Exception('No se pudo iniciar sesión.');
       }
-    } catch (e) {
+
       if (!mounted) return;
-      final friendly = _friendlyError(e);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const DashboardPage()),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final friendly = _friendlyError(error);
       showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (_) => AlertDialog(
           title: const Text('Error al iniciar sesión'),
           content: Text(friendly),
           actions: [
@@ -74,7 +76,9 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -86,111 +90,112 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFFFF0F3), Color(0xFFFFFFFF)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
+            colors: [Color(0xFFF5EFEA), Color(0xFFFFFFFF)],
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // App title / logo
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.primaryColor.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.restaurant, size: 56, color: theme.primaryColor),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Leña Reserva',
-                      style: theme.textTheme.titleLarge ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Inicia sesión para continuar',
-                      style: theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 18),
-
-                    // Form
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _userController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              labelText: 'Usuario',
-                              hintText: 'usuario@dominio.com',
-                              prefixIcon: Icon(Icons.person),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Ingrese el usuario';
-                              return null;
-                            },
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                elevation: 10,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 82,
+                          height: 82,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _passController,
-                            obscureText: _obscure,
-                            decoration: InputDecoration(
-                              labelText: 'Contraseña',
-                              prefixIcon: const Icon(Icons.lock),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                                onPressed: () => setState(() => _obscure = !_obscure),
+                          child: Icon(
+                            Icons.restaurant,
+                            size: 46,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Leña Reserva',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Inicia sesión para continuar',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            AppTextField(
+                              controller: _userController,
+                              label: 'Usuario',
+                              hint: 'admin@gmail.com',
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Ingrese el usuario';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            TextFormField(
+                              controller: _passController,
+                              obscureText: _obscurePassword,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Ingrese la contraseña';
+                                }
+                                if (value.length < 4) {
+                                  return 'La contraseña es muy corta';
+                                }
+                                return null;
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'Contraseña',
+                                hintText: '••••••••',
+                                suffixIcon: IconButton(
+                                  tooltip: _obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                  ),
+                                ),
                               ),
                             ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return 'Ingrese la contraseña';
-                              if (v.length < 4) return 'La contraseña es muy corta';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 18),
-
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _loading ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: _loading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                    )
-                                  : const Text('Ingresar', style: TextStyle(fontSize: 16)),
+                            const SizedBox(height: AppSpacing.xl),
+                            AppButton(
+                              label: 'Ingresar',
+                              loading: _loading,
+                              onPressed: _submit,
                             ),
-                          ),
-
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () {
-                              // placeholder: navegar a pantalla de recuperación si existe
-                            },
-                            child: const Text('¿Olvidaste tu contraseña?'),
-                          ),
-                        ],
+                            const SizedBox(height: AppSpacing.md),
+                            TextButton(
+                              onPressed: () {},
+                              child: const Text('¿Olvidaste tu contraseña?'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
