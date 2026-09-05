@@ -21,14 +21,15 @@ class LenaReservaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = auth ?? (AuthController()..restore());
     return AuthScope(
-        controller: controller,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Leña Reserva App',
-          theme: AppTheme.light(),
-          home: const AuthGate(),
-          onGenerateRoute: _routes,
-        ));
+      controller: controller,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Leña Reserva App',
+        theme: AppTheme.light(),
+        home: const AuthGate(),
+        onGenerateRoute: _routes,
+      ),
+    );
   }
 
   Route<dynamic> _routes(RouteSettings settings) {
@@ -40,7 +41,10 @@ class LenaReservaApp extends StatelessWidget {
       );
     }
     if (path == '/registro') {
-      return MaterialPageRoute(builder: (_) => const RegisterPage(), settings: settings);
+      return MaterialPageRoute(
+        builder: (_) => const RegisterPage(),
+        settings: settings,
+      );
     }
     final isAuthenticated = auth?.isAuthenticated ?? false;
     if (!isAuthenticated) {
@@ -50,13 +54,22 @@ class LenaReservaApp extends StatelessWidget {
       );
     }
     if (path == '/inicio') {
-      return MaterialPageRoute(builder: (_) => const DashboardPage(), settings: settings);
+      return MaterialPageRoute(
+        builder: (_) => const DashboardPage(),
+        settings: settings,
+      );
     }
     if (path == '/app/reservas') {
-      return MaterialPageRoute(builder: (_) => const ReservationListPage(), settings: settings);
+      return MaterialPageRoute(
+        builder: (_) => const ReservationListPage(),
+        settings: settings,
+      );
     }
     if (path == '/app/reservas/nueva') {
-      return MaterialPageRoute(builder: (_) => const CreateReservationPage(), settings: settings);
+      return MaterialPageRoute(
+        builder: (_) => const CreateReservationPage(),
+        settings: settings,
+      );
     }
     final detail = RegExp(r'^/app/reservas/(\d+)$').firstMatch(path);
     if (detail != null) {
@@ -80,10 +93,7 @@ class AuthGate extends StatelessWidget {
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Leña Reserva App'),
-              CircularProgressIndicator(),
-            ],
+            children: [Text('Leña Reserva App'), CircularProgressIndicator()],
           ),
         ),
       );
@@ -105,6 +115,8 @@ class AuthGate extends StatelessWidget {
         ),
       );
     }
-    return auth.isAuthenticated ? const DashboardPage() : const LoginPage();
+    return auth.isAuthenticated
+        ? const ReservationListPage()
+        : const LoginPage();
   }
 }
