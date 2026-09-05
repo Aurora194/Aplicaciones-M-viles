@@ -133,10 +133,14 @@ class _ReservationListPageState extends State<ReservationListPage> {
               ],
             ),
             const SizedBox(height: 18),
-            _ReservationActions(
-              onView: _load,
-              onCreate: () =>
-                  Navigator.pushNamed(context, '/app/reservas/nueva'),
+            SizedBox(
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/app/reservas/nueva'),
+                icon: const Icon(Icons.add),
+                label: const Text('Nueva reserva'),
+              ),
             ),
             const SizedBox(height: 80),
             const Center(child: Text('No hay reservas registradas.')),
@@ -173,10 +177,14 @@ class _ReservationListPageState extends State<ReservationListPage> {
               ],
             ),
             const SizedBox(height: 18),
-            _ReservationActions(
-              onView: _load,
-              onCreate: () =>
-                  Navigator.pushNamed(context, '/app/reservas/nueva'),
+            SizedBox(
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/app/reservas/nueva'),
+                icon: const Icon(Icons.add),
+                label: const Text('Nueva reserva'),
+              ),
             ),
             const SizedBox(height: 24),
             ...reservations.map(
@@ -212,7 +220,7 @@ class _SummaryTile extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -240,7 +248,7 @@ class _SummaryTile extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 28,
+            fontSize: 24,
             height: 1,
             fontWeight: FontWeight.w700,
             color: color,
@@ -248,40 +256,6 @@ class _SummaryTile extends StatelessWidget {
         ),
       ],
     ),
-  );
-}
-
-class _ReservationActions extends StatelessWidget {
-  const _ReservationActions({required this.onView, required this.onCreate});
-
-  final VoidCallback onView;
-  final VoidCallback onCreate;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: SizedBox(
-          height: 44,
-          child: ElevatedButton.icon(
-            onPressed: onView,
-            icon: const Icon(Icons.receipt_long_outlined, size: 16),
-            label: const Text('Ver reservas'),
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: SizedBox(
-          height: 44,
-          child: ElevatedButton.icon(
-            onPressed: onCreate,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Nueva reserva'),
-          ),
-        ),
-      ),
-    ],
   );
 }
 
@@ -302,7 +276,7 @@ class _ReservationCard extends StatelessWidget {
         ? 'Cancelada'
         : 'Pendiente';
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       color: Colors.white,
       shadowColor: Colors.black12,
@@ -314,7 +288,7 @@ class _ReservationCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 17, 16, 18),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -324,7 +298,7 @@ class _ReservationCard extends StatelessWidget {
                     child: Text(
                       'Mesa ${item.tableNumber ?? item.tableId}',
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
@@ -332,8 +306,8 @@ class _ReservationCard extends StatelessWidget {
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
+                      horizontal: 8,
+                      vertical: 5,
                     ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: .12),
@@ -343,25 +317,25 @@ class _ReservationCard extends StatelessWidget {
                       statusLabel,
                       style: TextStyle(
                         color: statusColor,
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 5),
               Text(
                 item.clientName ?? 'Reserva de mesa',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
-                  fontSize: 13,
+                  fontSize: 11,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 18,
-                runSpacing: 10,
+                spacing: 10,
+                runSpacing: 6,
                 children: [
                   _ReservationMeta(
                     icon: Icons.calendar_today_outlined,
@@ -412,11 +386,11 @@ class _ReservationMeta extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 16, color: AppColors.primaryLight),
-      const SizedBox(width: 7),
+      Icon(icon, size: 14, color: AppColors.primaryLight),
+      const SizedBox(width: 5),
       Text(
         text,
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
       ),
     ],
   );
