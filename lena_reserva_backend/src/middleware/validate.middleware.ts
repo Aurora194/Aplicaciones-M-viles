@@ -19,7 +19,7 @@ export const validate = (schema: ZodSchema) => {
 
         } catch(error:any){
 
-            return res.status(400).json({
+            return res.status(422).json({
 
                 success:false,
 

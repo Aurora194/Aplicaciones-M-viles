@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../design/app_colors.dart';
 import '../design/app_spacing.dart';
 import 'reservation_card.dart';
 
-enum ReservationListState {
-  loading,
-  empty,
-  error,
-  success,
-}
+enum ReservationListState { loading, empty, error, success }
 
 class ReservationList extends StatelessWidget {
   const ReservationList({
@@ -17,12 +13,14 @@ class ReservationList extends StatelessWidget {
     this.reservations = const [],
     this.errorMessage,
     this.onRetry,
+    this.onReservationTap,
   });
 
   final ReservationListState state;
   final List<ReservationItem> reservations;
   final String? errorMessage;
   final VoidCallback? onRetry;
+  final void Function(ReservationItem reservation)? onReservationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +32,7 @@ class ReservationList extends StatelessWidget {
             child: CircularProgressIndicator(),
           ),
         );
+
       case ReservationListState.empty:
         return Center(
           child: Padding(
@@ -41,7 +40,11 @@ class ReservationList extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.inbox_outlined, size: 52, color: AppColors.primaryLight),
+                const Icon(
+                  Icons.inbox_outlined,
+                  size: 52,
+                  color: AppColors.primaryLight,
+                ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   'No hay reservas por el momento',
@@ -52,6 +55,7 @@ class ReservationList extends StatelessWidget {
             ),
           ),
         );
+
       case ReservationListState.error:
         return Center(
           child: Padding(
@@ -59,7 +63,11 @@ class ReservationList extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, size: 52, color: AppColors.danger),
+                const Icon(
+                  Icons.error_outline,
+                  size: 52,
+                  color: AppColors.danger,
+                ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   errorMessage ?? 'No se pudo cargar la información',
@@ -76,18 +84,26 @@ class ReservationList extends StatelessWidget {
             ),
           ),
         );
+
       case ReservationListState.success:
         if (reservations.isEmpty) {
-          return const Center(
-            child: Text('Sin reservas disponibles'),
-          );
+          return const Center(child: Text('Sin reservas disponibles'));
         }
 
         return ListView.separated(
           padding: const EdgeInsets.all(AppSpacing.md),
           itemCount: reservations.length,
           separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) => ReservationCard(item: reservations[index]),
+          itemBuilder: (context, index) {
+            final reservation = reservations[index];
+
+            return ReservationCard(
+              item: reservation,
+              onTap: () {
+                onReservationTap?.call(reservation);
+              },
+            );
+          },
         );
     }
   }
