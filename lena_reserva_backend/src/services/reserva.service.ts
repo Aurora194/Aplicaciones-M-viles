@@ -343,12 +343,13 @@ export class ReservaService {
 
 
 
-        await prisma.reserva.delete({
-
+        const reservaCancelada = await prisma.reserva.update({
             where:{
                 id
+            },
+            data:{
+                estado: "CANCELADA"
             }
-
         });
 
 
@@ -371,7 +372,8 @@ export class ReservaService {
 
             success:true,
 
-            message:"Reserva eliminada correctamente"
+            message:"Reserva cancelada correctamente",
+            data:reservaCancelada
 
         };
 

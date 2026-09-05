@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import 'design/app_colors.dart';
 import 'design/app_spacing.dart';
+import 'state/auth_controller.dart';
 import 'widgets/app_button.dart';
 import 'widgets/reservation_card.dart';
 import 'widgets/reservation_list.dart';
@@ -17,6 +19,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   final List<ReservationItem> _reservations = const [
     ReservationItem(
+      id: 1,
       title: 'Mesa para 4',
       subtitle: 'Evento familiar',
       date: '15 Sep 2026',
@@ -25,6 +28,7 @@ class _DashboardPageState extends State<DashboardPage> {
       status: ReservationStatus.confirmed,
     ),
     ReservationItem(
+      id: 2,
       title: 'Terraza VIP',
       subtitle: 'Cena romántica',
       date: '18 Sep 2026',
@@ -33,6 +37,7 @@ class _DashboardPageState extends State<DashboardPage> {
       status: ReservationStatus.pending,
     ),
     ReservationItem(
+      id: 3,
       title: 'Sala privada',
       subtitle: 'Reunión de trabajo',
       date: '22 Sep 2026',
@@ -55,6 +60,16 @@ class _DashboardPageState extends State<DashboardPage> {
             tooltip: 'Filtrar reservas',
             onPressed: () {},
             icon: const Icon(Icons.filter_list_outlined),
+          ),
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            onPressed: () async {
+              await AuthScope.of(context).signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+              }
+            },
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
@@ -96,15 +111,31 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: SizedBox(
                       width: isCompact ? double.infinity : 220,
-                      child: AppButton(
-                        label: 'Nueva reserva',
-                        onPressed: () {},
-                        icon: Icons.add,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: AppButton(
+                              label: 'Ver reservas',
+                              onPressed: () => Navigator.pushNamed(context, '/app/reservas'),
+                              icon: Icons.list_alt,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: AppButton(
+                              label: 'Nueva reserva',
+                              onPressed: () => Navigator.pushNamed(context, '/app/reservas/nueva'),
+                              icon: Icons.add,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -114,7 +145,14 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: ReservationList(
                     state: _state,
                     reservations: _reservations,
-                    onRetry: () => setState(() => _state = ReservationListState.success),
+                    onRetry: () {
+                      setState(() => _state = ReservationListState.success);
+                    },
+                    onReservationTap: (reservation) {
+                      Navigator.of(
+                        context,
+                      ).pushNamed('/app/reservas/${reservation.id}');
+                    },
                   ),
                 ),
               ],
@@ -149,14 +187,13 @@ class _SummaryTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: AppSpacing.sm),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: color),
           ),
         ],
       ),

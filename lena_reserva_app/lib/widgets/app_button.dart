@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../design/app_colors.dart';
+import '../design/app_radius.dart';
+import '../design/app_spacing.dart';
+import '../design/app_typography.dart';
+
 class AppButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -16,21 +21,36 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = !loading && onPressed != null;
+
     return Semantics(
       button: true,
-      enabled: !loading && onPressed != null,
+      enabled: enabled,
       label: loading ? '$label, cargando' : label,
       child: SizedBox(
         width: double.infinity,
         height: 48,
         child: ElevatedButton(
-          onPressed: loading ? null : onPressed,
+          onPressed: enabled ? onPressed : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.onPrimary,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                AppRadius.md,
+              ),
+            ),
+          ),
           child: loading
               ? const SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
+                    color: AppColors.onPrimary,
                   ),
                 )
               : Row(
@@ -38,9 +58,12 @@ class AppButton extends StatelessWidget {
                   children: [
                     if (icon != null) ...[
                       Icon(icon),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                     ],
-                    Text(label),
+                    Text(
+                      label,
+                      style: AppTypography.button,
+                    ),
                   ],
                 ),
         ),

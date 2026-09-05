@@ -13,6 +13,7 @@ class HealthScreen extends StatefulWidget {
 
 class _HealthScreenState extends State<HealthScreen> {
   AppViewState state = AppViewState.loading;
+
   String mensaje = 'Comprobando conexión...';
 
   @override
@@ -29,9 +30,12 @@ class _HealthScreenState extends State<HealthScreen> {
 
     try {
       final respuesta = await ApiService.healthCheck();
+
       setState(() {
         state = AppViewState.success;
-        mensaje = respuesta['message'] ?? 'Leña Reserva API funcionando correctamente';
+        mensaje =
+            respuesta['message'] ??
+            'Leña Reserva API funcionando correctamente';
       });
     } catch (e) {
       setState(() {
@@ -44,9 +48,7 @@ class _HealthScreenState extends State<HealthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leña Reserva App'),
-      ),
+      appBar: AppBar(title: const Text('Leña Reserva App')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -70,32 +72,37 @@ class _HealthScreenState extends State<HealthScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 80),
+
           Semantics(
             label: 'Restaurante Leña Steak House',
             image: true,
-            child: const Icon(
-              Icons.restaurant,
-              size: 64,
-            ),
+            child: const Icon(Icons.restaurant, size: 64),
           ),
+
           const SizedBox(height: 24),
+
           Text(
             'Leña Reserva App',
             style: Theme.of(context).textTheme.titleLarge,
             textAlign: TextAlign.center,
           ),
+
           const SizedBox(height: 16),
+
           Text(
             mensaje,
             style: Theme.of(context).textTheme.bodyLarge,
             textAlign: TextAlign.center,
           ),
+
           const SizedBox(height: 24),
+
           AppButton(
             label: 'Verificar servidor',
             icon: Icons.refresh,
             onPressed: verificarBackend,
           ),
+
           const SizedBox(height: 24),
         ],
       ),
