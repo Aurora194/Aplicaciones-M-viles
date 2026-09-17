@@ -13,7 +13,7 @@ build/
 # Logs
 logs/
 *.log
-
+key.properties
 # Cobertura
 coverage/
 
@@ -32,3 +32,10 @@ Thumbs.db
 
 # Archivos locales
 POST/
+.env
+
+**/.env
+
+.env.*
+
+!.env.example
