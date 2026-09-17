@@ -308,6 +308,7 @@ class ApiService {
           headers: {
             ..._authorizationHeaders(token),
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           body: jsonEncode({
             'fecha': date.toUtc().toIso8601String(),
@@ -320,7 +321,16 @@ class ApiService {
 
     final body = _decode(response);
 
-    return Reservation.fromJson(body['data'] as Map<String, dynamic>);
+    final rawData = body['data'];
+
+    if (rawData is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la reserva creada.',
+      );
+    }
+
+    return Reservation.fromJson(Map<String, dynamic>.from(rawData));
   }
 
   static Future<Reservation> updateReservation({

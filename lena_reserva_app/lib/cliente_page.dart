@@ -19,14 +19,31 @@ class _ClientePageState extends State<ClientePage> {
   Uint8List? _profilePhoto;
   bool _loadingPhoto = true;
 
+  String _userPhotoKey = 'usuario';
+
   @override
   void initState() {
     super.initState();
-    _loadProfilePhoto();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProfilePhoto();
+    });
   }
 
+  // ============================================================
+  // FOTO DE PERFIL
+  // ============================================================
+
   Future<void> _loadProfilePhoto() async {
-    final photo = await ProfilePhotoService.loadPhoto();
+    if (!mounted) return;
+
+    final auth = AuthScope.of(context);
+
+    final userName = (auth.userName ?? 'usuario').trim();
+
+    _userPhotoKey = userName.isEmpty ? 'usuario' : userName;
+
+    final photo = await ProfilePhotoService.loadPhoto(userKey: _userPhotoKey);
 
     if (!mounted) return;
 
@@ -42,11 +59,14 @@ class _ClientePageState extends State<ClientePage> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Tomar foto de perfil'),
+          title: const Text(
+            'Tomar foto de perfil',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           content: const Text(
             'Leña Reserva necesita utilizar la cámara del dispositivo '
-            'para tomar una foto de perfil. La foto se guardará de forma '
-            'local en este dispositivo.',
+            'para tomar una foto de perfil. La fotografía se guardará '
+            'localmente para este usuario.',
           ),
           actions: [
             TextButton(
@@ -85,9 +105,14 @@ class _ClientePageState extends State<ClientePage> {
         }
 
         try {
-          await ProfilePhotoService.savePhoto(result.file!);
+          await ProfilePhotoService.savePhoto(
+            userKey: _userPhotoKey,
+            file: result.file!,
+          );
 
-          final photo = await ProfilePhotoService.loadPhoto();
+          final photo = await ProfilePhotoService.loadPhoto(
+            userKey: _userPhotoKey,
+          );
 
           if (!mounted) return;
 
@@ -100,13 +125,17 @@ class _ClientePageState extends State<ClientePage> {
               content: Text('Foto de perfil guardada correctamente.'),
             ),
           );
-        } catch (_) {
+        } catch (e) {
+          debugPrint('CLIENTE - ERROR GUARDANDO FOTO: $e');
+
           await _showMessage(
             title: 'No se pudo guardar',
             message:
-                'La foto fue tomada, pero no se pudo guardar en el dispositivo.',
+                'La foto fue tomada, pero no se pudo guardar '
+                'en el dispositivo.',
           );
         }
+
         break;
 
       case CameraStatus.denied:
@@ -121,8 +150,9 @@ class _ClientePageState extends State<ClientePage> {
         await _showMessage(
           title: 'Cámara restringida',
           message:
-              'El sistema del dispositivo restringe el acceso a la cámara. '
-              'Revisa los controles de privacidad o permisos del dispositivo.',
+              'El sistema del dispositivo restringe el acceso '
+              'a la cámara. Revisa los controles de privacidad '
+              'o permisos del dispositivo.',
         );
         break;
 
@@ -130,7 +160,8 @@ class _ClientePageState extends State<ClientePage> {
         await _showMessage(
           title: 'Cámara no disponible',
           message:
-              'La cámara no está disponible en este dispositivo en este momento.',
+              'La cámara no está disponible en este dispositivo '
+              'en este momento.',
         );
         break;
 
@@ -143,7 +174,9 @@ class _ClientePageState extends State<ClientePage> {
       case CameraStatus.error:
         await _showMessage(
           title: 'Error de cámara',
-          message: 'No fue posible acceder a la cámara. Intenta nuevamente.',
+          message:
+              'No fue posible acceder a la cámara. '
+              'Intenta nuevamente.',
         );
         break;
     }
@@ -180,9 +213,9 @@ class _ClientePageState extends State<ClientePage> {
         return AlertDialog(
           title: const Text('Permiso bloqueado'),
           content: const Text(
-            'El acceso a la cámara está bloqueado para esta aplicación. '
-            'Para volver a utilizarla, debes habilitar el permiso desde '
-            'los ajustes del dispositivo.',
+            'El acceso a la cámara está bloqueado para esta '
+            'aplicación. Para volver a utilizarla, debes '
+            'habilitar el permiso desde los ajustes del dispositivo.',
           ),
           actions: [
             TextButton(
@@ -230,12 +263,17 @@ class _ClientePageState extends State<ClientePage> {
     );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F7F6),
+
       appBar: AppBar(
         title: const Text(
           'Cliente',
@@ -257,6 +295,7 @@ class _ClientePageState extends State<ClientePage> {
           ),
         ],
       ),
+
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
@@ -267,12 +306,16 @@ class _ClientePageState extends State<ClientePage> {
               loadingPhoto: _loadingPhoto,
               onTakePhoto: _takeProfilePhoto,
             ),
+
             const SizedBox(height: 28),
+
             const Text(
               'Mis opciones',
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
             ),
+
             const SizedBox(height: 14),
+
             _OptionCard(
               icon: Icons.calendar_month_outlined,
               title: 'Ver mis reservas',
@@ -282,7 +325,9 @@ class _ClientePageState extends State<ClientePage> {
                 Navigator.pushNamed(context, '/app/reservas');
               },
             ),
+
             const SizedBox(height: 14),
+
             _OptionCard(
               icon: Icons.add_circle_outline,
               title: 'Nueva reserva',
@@ -292,23 +337,28 @@ class _ClientePageState extends State<ClientePage> {
                 Navigator.pushNamed(context, '/app/reservas/nueva');
               },
             ),
+
             const SizedBox(height: 14),
+
             _OptionCard(
               icon: Icons.table_restaurant_outlined,
               title: 'Consultar disponibilidad',
               description:
-                  'Consulta las mesas disponibles para una fecha y hora determinada.',
+                  'Selecciona una fecha y hora para consultar las mesas disponibles.',
               onTap: () {
                 debugPrint('CLIENTE - SE PRESIONÓ CONSULTAR DISPONIBILIDAD');
 
                 _showAvailability(context);
               },
             ),
+
             const SizedBox(height: 28),
+
             const _InformationCard(),
           ],
         ),
       ),
+
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'cliente_ai_fab',
         backgroundColor: AppColors.primary,
@@ -323,6 +373,7 @@ class _ClientePageState extends State<ClientePage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
+
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -347,6 +398,10 @@ class _ClientePageState extends State<ClientePage> {
     );
   }
 }
+
+// ============================================================
+// TARJETA DE BIENVENIDA
+// ============================================================
 
 class _WelcomeCard extends StatelessWidget {
   const _WelcomeCard({
@@ -411,6 +466,7 @@ class _WelcomeCard extends StatelessWidget {
                         ),
                 ),
               ),
+
               Positioned(
                 right: -4,
                 bottom: -4,
@@ -434,7 +490,9 @@ class _WelcomeCard extends StatelessWidget {
               ),
             ],
           ),
+
           const SizedBox(width: 18),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,7 +501,9 @@ class _WelcomeCard extends StatelessWidget {
                   'Bienvenido',
                   style: TextStyle(fontSize: 15, color: Colors.black54),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   name,
                   maxLines: 2,
@@ -453,7 +513,9 @@ class _WelcomeCard extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+
                 const SizedBox(height: 6),
+
                 const Text(
                   'Gestiona tus reservas en Leña.',
                   style: TextStyle(fontSize: 14, color: Colors.black54),
@@ -466,6 +528,10 @@ class _WelcomeCard extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// OPCIÓN
+// ============================================================
 
 class _OptionCard extends StatelessWidget {
   const _OptionCard({
@@ -506,7 +572,9 @@ class _OptionCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: AppColors.primary, size: 26),
               ),
+
               const SizedBox(width: 15),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,7 +586,9 @@ class _OptionCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+
                     const SizedBox(height: 5),
+
                     Text(
                       description,
                       style: const TextStyle(
@@ -530,7 +600,9 @@ class _OptionCard extends StatelessWidget {
                   ],
                 ),
               ),
+
               const SizedBox(width: 8),
+
               const Icon(Icons.chevron_right, color: Colors.black38),
             ],
           ),
@@ -539,6 +611,10 @@ class _OptionCard extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// INFORMACIÓN
+// ============================================================
 
 class _InformationCard extends StatelessWidget {
   const _InformationCard();
@@ -555,7 +631,9 @@ class _InformationCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.info_outline, color: AppColors.primary, size: 24),
+
           const SizedBox(width: 12),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,7 +642,9 @@ class _InformationCard extends StatelessWidget {
                   'Información',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
+
                 const SizedBox(height: 6),
+
                 Text(
                   'Puedes consultar tus reservas, crear una nueva '
                   'reserva y verificar la disponibilidad de mesas.',
@@ -583,6 +663,10 @@ class _InformationCard extends StatelessWidget {
   }
 }
 
+// ============================================================
+// DIÁLOGO DE DISPONIBILIDAD
+// ============================================================
+
 class _AvailabilityDialog extends StatefulWidget {
   const _AvailabilityDialog();
 
@@ -591,74 +675,79 @@ class _AvailabilityDialog extends StatefulWidget {
 }
 
 class _AvailabilityDialogState extends State<_AvailabilityDialog> {
-  late DateTime selectedDate;
-  late TimeOfDay selectedTime;
+  DateTime? selectedDate;
+  TimeOfDay? selectedTime;
 
   bool loading = false;
+
   String? errorMessage;
 
   List<dynamic> mesas = [];
 
-  @override
-  void initState() {
-    super.initState();
-
-    final now = DateTime.now();
-
-    selectedDate = DateTime(now.year, now.month, now.day);
-
-    selectedTime = const TimeOfDay(hour: 19, minute: 0);
-
-    _loadAvailability();
-  }
-
-  DateTime get selectedDateTime {
-    return DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedTime.hour,
-      selectedTime.minute,
-    );
-  }
+  // ============================================================
+  // FECHA
+  // ============================================================
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
 
+    final today = DateTime(now.year, now.month, now.day);
+
     final result = await showDatePicker(
       context: context,
-      initialDate: selectedDate.isBefore(DateTime(now.year, now.month, now.day))
-          ? now
-          : selectedDate,
-      firstDate: DateTime(now.year, now.month, now.day),
+      initialDate: selectedDate ?? today,
+      firstDate: today,
       lastDate: DateTime(now.year + 1, now.month, now.day),
     );
 
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) {
+      return;
+    }
 
     setState(() {
-      selectedDate = result;
-    });
+      selectedDate = DateTime(result.year, result.month, result.day);
 
-    await _loadAvailability();
+      errorMessage = null;
+      mesas = [];
+    });
   }
+
+  // ============================================================
+  // HORA
+  // ============================================================
 
   Future<void> _pickTime() async {
     final result = await showTimePicker(
       context: context,
-      initialTime: selectedTime,
+      initialTime: selectedTime ?? const TimeOfDay(hour: 19, minute: 0),
     );
 
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) {
+      return;
+    }
 
     setState(() {
       selectedTime = result;
-    });
 
-    await _loadAvailability();
+      errorMessage = null;
+      mesas = [];
+    });
   }
 
+  // ============================================================
+  // CONSULTAR
+  // ============================================================
+
   Future<void> _loadAvailability() async {
+    if (selectedDate == null || selectedTime == null) {
+      setState(() {
+        errorMessage =
+            'Selecciona una fecha y una hora para consultar la disponibilidad.';
+      });
+
+      return;
+    }
+
     final auth = AuthScope.of(context);
 
     final token = auth.accessToken;
@@ -674,16 +763,36 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
       return;
     }
 
+    final dateTime = DateTime(
+      selectedDate!.year,
+      selectedDate!.month,
+      selectedDate!.day,
+      selectedTime!.hour,
+      selectedTime!.minute,
+    );
+
+    debugPrint('========================================');
+    debugPrint('CLIENTE - CONSULTA DE DISPONIBILIDAD');
+    debugPrint('Fecha: ${_formatDate(selectedDate!)}');
+    debugPrint('Hora: ${_formatTime(selectedTime!)}');
+    debugPrint('DateTime: $dateTime');
+    debugPrint('========================================');
+
     setState(() {
       loading = true;
       errorMessage = null;
+      mesas = [];
     });
 
     try {
-      final result = await ApiService.getAvailableTables(
-        token,
-        date: selectedDateTime,
-      );
+      /*
+       * IMPORTANTE:
+       *
+       * Esta consulta NO utiliza AIPage.
+       * Se comunica directamente con el backend de mesas
+       * mediante ApiService.getAvailableTables().
+       */
+      final result = await ApiService.getAvailableTables(token, date: dateTime);
 
       if (!mounted) return;
 
@@ -691,12 +800,10 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
         mesas = result;
         loading = false;
       });
-    } catch (error) {
+    } on ApiException catch (exception) {
       if (!mounted) return;
 
-      final message = error.toString();
-
-      if (message.contains('401')) {
+      if (exception.statusCode == 401) {
         await auth.signOut();
 
         if (!mounted) return;
@@ -712,25 +819,51 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
       setState(() {
         loading = false;
-        errorMessage = 'No fue posible consultar la disponibilidad.';
+        errorMessage = exception.message;
+      });
+    } catch (error) {
+      debugPrint('CLIENTE - ERROR DISPONIBILIDAD: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+        errorMessage =
+            'No fue posible consultar la disponibilidad. '
+            'Intenta nuevamente.';
       });
     }
   }
 
+  // ============================================================
+  // FORMATO FECHA
+  // ============================================================
+
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
+
     final month = date.month.toString().padLeft(2, '0');
+
     final year = date.year.toString();
 
     return '$day/$month/$year';
   }
 
+  // ============================================================
+  // FORMATO HORA
+  // ============================================================
+
   String _formatTime(TimeOfDay time) {
     final hour = time.hour.toString().padLeft(2, '0');
+
     final minute = time.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
   }
+
+  // ============================================================
+  // NOMBRE DE MESA
+  // ============================================================
 
   String _getMesaNumero(dynamic mesa) {
     if (mesa is Map) {
@@ -740,6 +873,10 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
     return 'Mesa';
   }
 
+  // ============================================================
+  // CAPACIDAD
+  // ============================================================
+
   String _getMesaCapacidad(dynamic mesa) {
     if (mesa is Map) {
       return '${mesa['capacidad'] ?? '-'} personas';
@@ -748,47 +885,102 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
     return '- personas';
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
+    final hasDate = selectedDate != null;
+    final hasTime = selectedTime != null;
+    final canSearch = hasDate && hasTime;
+
     return AlertDialog(
       title: const Text(
         'Consultar disponibilidad',
         style: TextStyle(fontWeight: FontWeight.w800),
       ),
+
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                      label: Text(_formatDate(selectedDate)),
-                    ),
+              // ==================================================
+              // FECHA
+              // ==================================================
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: loading ? null : _pickDate,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                  label: Text(
+                    hasDate ? _formatDate(selectedDate!) : 'Seleccionar fecha',
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickTime,
-                      icon: const Icon(Icons.access_time_outlined, size: 18),
-                      label: Text(_formatTime(selectedTime)),
-                    ),
-                  ),
-                ],
+                ),
               ),
+
+              const SizedBox(height: 10),
+
+              // ==================================================
+              // HORA
+              // ==================================================
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: loading ? null : _pickTime,
+                  icon: const Icon(Icons.access_time_outlined, size: 18),
+                  label: Text(
+                    hasTime ? _formatTime(selectedTime!) : 'Seleccionar hora',
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // ==================================================
+              // BOTÓN CONSULTAR
+              // ==================================================
+              if (canSearch)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: loading ? null : _loadAvailability,
+                    icon: loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.search),
+                    label: Text(
+                      loading ? 'Consultando...' : 'Consultar disponibilidad',
+                    ),
+                  ),
+                ),
+
+              if (!canSearch) ...[
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Selecciona una fecha y una hora para consultar las mesas disponibles.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ],
+
               const SizedBox(height: 18),
-              if (loading)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: CircularProgressIndicator(),
-                )
-              else if (errorMessage != null)
+
+              // ==================================================
+              // ERROR
+              // ==================================================
+              if (errorMessage != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Column(
                     children: [
                       const Icon(
@@ -796,18 +988,34 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                         size: 42,
                         color: Colors.redAccent,
                       ),
+
                       const SizedBox(height: 10),
+
                       Text(errorMessage!, textAlign: TextAlign.center),
+
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _loadAvailability,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Reintentar'),
-                      ),
+
+                      if (canSearch)
+                        OutlinedButton.icon(
+                          onPressed: loading ? null : _loadAvailability,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Reintentar'),
+                        ),
                     ],
                   ),
                 )
-              else if (mesas.isEmpty)
+              // ==================================================
+              // CARGANDO
+              // ==================================================
+              else if (loading)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(),
+                )
+              // ==================================================
+              // RESULTADOS
+              // ==================================================
+              else if (canSearch && mesas.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
                   child: Column(
@@ -817,7 +1025,9 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                         size: 42,
                         color: Colors.black38,
                       ),
+
                       SizedBox(height: 10),
+
                       Text(
                         'No hay mesas disponibles para la fecha y hora seleccionadas.',
                         textAlign: TextAlign.center,
@@ -825,7 +1035,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                     ],
                   ),
                 )
-              else
+              else if (mesas.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -833,76 +1043,83 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                       '${mesas.length} mesa(s) disponible(s)',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
+
                     const SizedBox(height: 10),
-                    ...mesas.map(
-                      (mesa) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.10,
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                Icons.table_restaurant,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _getMesaNumero(mesa),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    _getMesaCapacidad(mesa),
-                                    style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.check_circle_outline,
-                              color: Colors.green,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+
+                    ...mesas.map((mesa) => _buildTableItem(mesa)),
                   ],
                 ),
             ],
           ),
         ),
       ),
+
+      // ==========================================================
+      // CERRAR
+      // ==========================================================
       actions: [
         TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: loading
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                },
           child: const Text('Cerrar'),
         ),
       ],
+    );
+  }
+
+  // ============================================================
+  // ELEMENTO DE MESA
+  // ============================================================
+
+  Widget _buildTableItem(dynamic mesa) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.table_restaurant, color: AppColors.primary),
+          ),
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _getMesaNumero(mesa),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+
+                const SizedBox(height: 3),
+
+                Text(
+                  _getMesaCapacidad(mesa),
+                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+
+          const Icon(Icons.check_circle_outline, color: Colors.green),
+        ],
+      ),
     );
   }
 }

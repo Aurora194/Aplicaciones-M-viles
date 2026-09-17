@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'design/app_colors.dart';
 import 'models/reservation.dart';
 import 'services/api_service.dart';
+import '../services/notification_service.dart';
 import 'auth/auth_scope.dart';
 
 enum ReservationLoadState { loading, empty, error, success }
@@ -660,6 +661,10 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
         id: item.id,
         status: status,
       );
+
+      if (status == 'CANCELADA') {
+        await NotificationService.cancelReservationNotification(item.id);
+      }
 
       if (!mounted) return;
 
@@ -1354,6 +1359,194 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     CreateReservationPage.draftTime = null;
   }
 
+  Future<void> _handleReservationNotifications({
+    required int reservationId,
+    required DateTime ecuadorDateTime,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+
+    // ---------------------------------------------------------
+    // Explicación antes de solicitar el permiso.
+    // ---------------------------------------------------------
+
+    final wantsNotifications = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.notifications_active_outlined),
+              SizedBox(width: 10),
+              Expanded(child: Text('Recordatorios')),
+            ],
+          ),
+          content: const Text(
+            '¿Deseas recibir una notificación cuando se cree tu reserva '
+            'y un recordatorio 30 minutos antes de la hora reservada?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Ahora no'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Activar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // El usuario decidió no utilizar notificaciones.
+    // La reserva ya está creada y continúa funcionando normalmente.
+    if (wantsNotifications != true || !mounted) {
+      return;
+    }
+
+    try {
+      final permission = await NotificationService.requestPermission();
+
+      if (!mounted) {
+        return;
+      }
+
+      switch (permission) {
+        case NotificationPermissionResult.granted:
+          // ---------------------------------------------------
+          // Notificación inmediata.
+          // ---------------------------------------------------
+
+          await NotificationService.showReservationCreated(
+            reservationId: reservationId,
+          );
+
+          // ---------------------------------------------------
+          // Recordatorio 30 minutos antes.
+          // ---------------------------------------------------
+
+          await NotificationService.scheduleReservationReminder(
+            reservationId: reservationId,
+            reservationDateTime: ecuadorDateTime,
+            minutesBefore: 30,
+          );
+
+          if (!mounted) {
+            return;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Notificaciones activadas. Recibirás un recordatorio '
+                '30 minutos antes de tu reserva.',
+              ),
+            ),
+          );
+
+          break;
+
+        case NotificationPermissionResult.denied:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Las notificaciones fueron rechazadas. '
+                'La reserva se creó correctamente.',
+              ),
+            ),
+          );
+          break;
+
+        case NotificationPermissionResult.permanentlyDenied:
+          await _showNotificationSettingsDialog();
+          break;
+
+        case NotificationPermissionResult.restricted:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Las notificaciones están restringidas en este dispositivo. '
+                'La reserva se creó correctamente.',
+              ),
+            ),
+          );
+          break;
+
+        case NotificationPermissionResult.unavailable:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Las notificaciones no están disponibles. '
+                'La reserva se creó correctamente.',
+              ),
+            ),
+          );
+          break;
+      }
+    } catch (error) {
+      debugPrint('ERROR NOTIFICACIONES: $error');
+
+      if (!mounted) {
+        return;
+      }
+
+      // Degradación elegante:
+      // una falla en las notificaciones NO afecta la reserva.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La reserva se creó correctamente, '
+            'pero no fue posible activar las notificaciones.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showNotificationSettingsDialog() async {
+    if (!mounted) {
+      return;
+    }
+
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Notificaciones bloqueadas'),
+          content: const Text(
+            'El permiso de notificaciones está bloqueado. '
+            'Puedes activarlo desde la configuración de la aplicación.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Ahora no'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Abrir ajustes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (openSettings == true) {
+      await NotificationService.openSettings();
+    }
+  }
+
   Future<void> _submit() async {
     if (!mounted) return;
 
@@ -1379,9 +1572,9 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       return;
     }
 
-    /// =========================================================
-    /// ECUADOR -> UTC
-    /// =========================================================
+    // =========================================================
+    // ECUADOR -> UTC
+    // =========================================================
 
     final ecuadorDate = buildEcuadorDateTime(selectedDate!, selectedTime!);
 
@@ -1427,23 +1620,17 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       return;
     }
 
+    // =========================================================
+    // DEBUG
+    // =========================================================
+
     debugPrint('========================================');
-
     debugPrint('CREAR RESERVA');
-
     debugPrint('RESERVA ECUADOR: $ecuadorDate');
-
-    debugPrint(
-      'RESERVA UTC: '
-      '${date.toIso8601String()}',
-    );
-
+    debugPrint('RESERVA UTC: ${date.toIso8601String()}');
     debugPrint('PERSONAS: $people');
-
     debugPrint('MESA ID: $tableId');
-
     debugPrint('USUARIO ID: $selectedUserId');
-
     debugPrint('========================================');
 
     setState(() {
@@ -1451,29 +1638,68 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     });
 
     try {
-      await ApiService.createReservation(
+      // =======================================================
+      // CREAR RESERVA EN BACKEND
+      // =======================================================
+
+      final reservation = await ApiService.createReservation(
         token: token,
-
-        /// IMPORTANTE:
-        /// Aquí ya enviamos UTC.
-        ///
-        /// ApiService hace date.toUtc(),
-        /// pero como date ya está en UTC,
-        /// no se vuelve a desplazar.
         date: date,
-
         people: people,
         userId: selectedUserId!,
         tableId: tableId,
       );
 
-      if (!mounted) return;
+      debugPrint('========================================');
+      debugPrint('RESERVA CREADA');
+      debugPrint('ID: ${reservation.id}');
+      debugPrint('ESTADO: ${reservation.status}');
+      debugPrint('FECHA BACKEND UTC: ${reservation.date.toIso8601String()}');
+      debugPrint('========================================');
+
+      if (!mounted) {
+        return;
+      }
+
+      // =======================================================
+      // GUARDAR Y LIMPIAR BORRADOR
+      // =======================================================
 
       _clearDraft();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reserva creada exitosamente.')),
+      // =======================================================
+      // NOTIFICACIONES LOCALES
+      // =======================================================
+      //
+      // IMPORTANTE:
+      // ecuadorDate representa la hora que eligió el usuario.
+      //
+      // Ejemplo:
+      // Ecuador: 17/09/2026 20:00
+      // UTC:     18/09/2026 01:00
+      //
+      // Para el recordatorio utilizamos ecuadorDate.
+      // NotificationService usa America/Guayaquil.
+      // =======================================================
+
+      await _handleReservationNotifications(
+        reservationId: reservation.id,
+        ecuadorDateTime: ecuadorDate,
       );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reserva #${reservation.id} creada exitosamente.'),
+        ),
+      );
+
+      // =======================================================
+      // VOLVER A LISTA DE RESERVAS
+      // =======================================================
 
       Navigator.pushReplacementNamed(context, '/app/reservas');
     } on ApiException catch (error) {
@@ -1491,6 +1717,12 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         setState(() {
           serverErrors = error.fieldErrors;
         });
+
+        if (error.fieldErrors.isEmpty) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.message)));
+        }
       } else {
         ScaffoldMessenger.of(
           context,
@@ -1498,6 +1730,8 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       }
     } catch (error) {
       if (!mounted) return;
+
+      debugPrint('ERROR CREANDO RESERVA: $error');
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al crear la reserva: $error')),
