@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { controller } from "../controllers/reserva.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
-import { authorizeRole } from "../middleware/role.middleware";
 import { validate } from "../middleware/validate.middleware";
 import {
   reservaSchema,
@@ -76,7 +75,6 @@ const router = Router();
 router.get(
   "/",
   authenticateToken,
-  authorizeRole("ADMIN"),
   controller.getReservas.bind(controller)
 );
 

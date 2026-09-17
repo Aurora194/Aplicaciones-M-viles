@@ -14,22 +14,48 @@ class Reservation {
   final int people;
   final String status;
   final int tableId;
-  final int? tableNumber;
+  final String? tableNumber;
   final String? clientName;
 
   factory Reservation.fromJson(Map<String, dynamic> json) {
-    final table = json['mesa'] as Map<String, dynamic>?;
-    final user = json['usuario'] as Map<String, dynamic>?;
+    final table = json['mesa'] is Map
+        ? Map<String, dynamic>.from(json['mesa'] as Map)
+        : null;
+
+    final user = json['usuario'] is Map
+        ? Map<String, dynamic>.from(json['usuario'] as Map)
+        : null;
+
     return Reservation(
-      id: (json['id'] as num).toInt(),
+      id: json['id'] is num
+          ? (json['id'] as num).toInt()
+          : int.tryParse(json['id']?.toString() ?? '') ?? 0,
       date: DateTime.parse(json['fecha'].toString()),
-      people: (json['personas'] as num).toInt(),
-      status: json['estado']?.toString() ?? 'PENDIENTE',
-      tableId: (json['mesaId'] as num).toInt(),
-      tableNumber: (table?['numero'] as num?)?.toInt(),
-      clientName: user == null
-          ? null
-          : '${user['nombre'] ?? ''} ${user['apellido'] ?? ''}'.trim(),
+      people: json['personas'] is num
+          ? (json['personas'] as num).toInt()
+          : int.tryParse(json['personas']?.toString() ?? '') ?? 0,
+      status: json['estado']?.toString().trim().toUpperCase() ?? 'PENDIENTE',
+      tableId: json['mesaId'] is num
+          ? (json['mesaId'] as num).toInt()
+          : int.tryParse(json['mesaId']?.toString() ?? '') ?? 0,
+      tableNumber: table?['numero']?.toString(),
+      clientName: user == null ? null : _buildClientName(user),
     );
+  }
+
+  static String? _buildClientName(Map<String, dynamic> user) {
+    final nombre = user['nombre']?.toString().trim() ?? '';
+
+    final apellido = user['apellido']?.toString().trim() ?? '';
+
+    final nombreCompleto = '$nombre $apellido'.trim();
+
+    if (nombreCompleto.isNotEmpty) {
+      return nombreCompleto;
+    }
+
+    final correo = user['correo']?.toString().trim();
+
+    return correo?.isNotEmpty == true ? correo : null;
   }
 }

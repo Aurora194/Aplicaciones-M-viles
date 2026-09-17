@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../utils/jwt";
+import prisma from "../config/prisma";
 
-export function authenticateToken(
+export async function authenticateToken(
     req: Request,
     res: Response,
     next: NextFunction
@@ -21,13 +22,36 @@ export function authenticateToken(
 
     }
 
-    const token = authHeader.split(" ")[1];
+    const [scheme, token] = authHeader.split(" ");
+
+    if (scheme?.toLowerCase() !== "bearer" || !token) {
+        return res.status(401).json({
+            success: false,
+            message: "Formato de token inválido."
+        });
+    }
 
     try {
 
-        const decoded = verifyAccessToken(token);
+        const decoded = verifyAccessToken(token) as { id?: number };
+        const usuario = decoded.id
+            ? await prisma.usuario.findFirst({
+                where: { id: decoded.id, deletedAt: null },
+                select: { id: true, correo: true, rol: true }
+            })
+            : null;
 
-        (req as any).user = decoded;
+        if (!usuario) {
+            return res.status(401).json({
+                success: false,
+                message: "Usuario no encontrado o inactivo."
+            });
+        }
+
+        (req as any).user = {
+            ...usuario,
+            rol: String(usuario.rol).trim().toUpperCase()
+        };
 
         next();
 

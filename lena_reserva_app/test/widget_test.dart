@@ -1,19 +1,18 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:lena_reserva_app/main.dart';
+import 'package:lena_reserva_app/state/auth_controller.dart';
 
 void main() {
-  testWidgets('La aplicación Leña Reserva App se carga correctamente', (
+  testWidgets('Lena Reserva App inicia correctamente', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const LenaReservaApp());
+    final auth = AuthController();
 
-    expect(find.text('Leña Reserva App'), findsOneWidget);
+    await tester.pumpWidget(LenaReservaApp(auth: auth));
+
+    await tester.pump();
+
+    expect(find.text('Leña Reserva'), findsWidgets);
   });
 }

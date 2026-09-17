@@ -11,6 +11,7 @@ import reservaRoutes from "./routes/reserva.routes";
 
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./docs/swagger";
+import aiRoutes from "./routes/ai.routes";
 
 import { limiter } from "./middleware/rateLimit.middleware";
 
@@ -44,6 +45,8 @@ app.use(morgan('dev'));
 app.use("/api/auth", authRoutes);
 
 app.use("/api/users", userRoutes);
+
+app.use("/api/ai", aiRoutes);
 
 app.get('/api/health', (req, res) => {
 

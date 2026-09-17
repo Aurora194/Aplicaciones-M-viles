@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'design/app_colors.dart';
 import 'design/app_spacing.dart';
-import 'state/auth_controller.dart';
 import 'widgets/app_button.dart';
 import 'widgets/reservation_card.dart';
 import 'widgets/reservation_list.dart';
+import 'auth/auth_scope.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -66,7 +66,9 @@ class _DashboardPageState extends State<DashboardPage> {
             onPressed: () async {
               await AuthScope.of(context).signOut();
               if (context.mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/login', (route) => false);
               }
             },
             icon: const Icon(Icons.logout),
@@ -123,7 +125,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           Expanded(
                             child: AppButton(
                               label: 'Ver reservas',
-                              onPressed: () => Navigator.pushNamed(context, '/app/reservas'),
+                              onPressed: () =>
+                                  Navigator.pushNamed(context, '/app/reservas'),
                               icon: Icons.list_alt,
                             ),
                           ),
@@ -131,7 +134,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           Expanded(
                             child: AppButton(
                               label: 'Nueva reserva',
-                              onPressed: () => Navigator.pushNamed(context, '/app/reservas/nueva'),
+                              onPressed: () => Navigator.pushNamed(
+                                context,
+                                '/app/reservas/nueva',
+                              ),
                               icon: Icons.add,
                             ),
                           ),

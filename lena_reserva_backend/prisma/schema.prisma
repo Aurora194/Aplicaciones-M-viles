@@ -25,13 +25,17 @@ model Usuario {
   reservas   Reserva[]
 
   refreshTokens RefreshToken[]
+
+  notificaciones Notificacion[]
+
+  passwordResets PasswordReset[]
 }
 
 model Mesa {
 
   id            Int @id @default(autoincrement())
 
-  numero        Int @unique
+  numero        String @unique
 
   capacidad     Int
 
@@ -87,6 +91,28 @@ model RefreshToken {
 
   createdAt  DateTime @default(now())
 
+}
+
+model PasswordReset {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  codigo     String
+  expiresAt  DateTime
+  usado      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+}
+
+model Notificacion {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  mensaje    String   @db.VarChar(255)
+  fechaEnvio DateTime @default(now())
+  leida      Boolean  @default(false)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 }
 
 enum Rol{

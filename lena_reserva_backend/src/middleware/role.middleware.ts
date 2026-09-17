@@ -22,7 +22,10 @@ export function authorizeRole(...roles: string[]) {
 
         }
 
-        if (!roles.includes(user.rol)) {
+        const userRole = String(user.rol || user.role || "").trim().toUpperCase();
+        const allowedRoles = roles.map((role) => role.trim().toUpperCase());
+
+        if (!allowedRoles.includes(userRole)) {
 
             return res.status(403).json({
 

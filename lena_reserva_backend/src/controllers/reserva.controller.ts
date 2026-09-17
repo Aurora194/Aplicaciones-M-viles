@@ -32,7 +32,8 @@ const service = new ReservaService();
 
         req.query.estado as any,
 
-        (req.query.order as "asc"|"desc") || "asc"
+        (req.query.order as "asc"|"desc") || "asc",
+        (req as any).user
 
         );
 
@@ -71,7 +72,8 @@ const service = new ReservaService();
 
         const result = await service.getOne(
 
-        Number(req.params.id)
+        Number(req.params.id),
+        (req as any).user
 
         );
 
@@ -105,7 +107,7 @@ const service = new ReservaService();
 
         try{
 
-        const result = await service.create(req.body);
+        const result = await service.create(req.body, (req as any).user);
 
         logger.info(`Reserva ${result.data.id} creada correctamente`);
 
@@ -144,7 +146,8 @@ const service = new ReservaService();
 
         Number(req.params.id),
 
-        req.body
+        req.body,
+        (req as any).user
 
         );
 
@@ -184,7 +187,8 @@ const service = new ReservaService();
 
         const result = await service.remove(
 
-        Number(req.params.id)
+        Number(req.params.id),
+        (req as any).user
 
         );
 
