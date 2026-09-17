@@ -1,17 +1,34 @@
+# Dependencias
 node_modules/
 
+# Compilación
 dist/
+build/
 
+# Variables de entorno y secretos
 .env
+.env.*
+!.env.example
 
-.env.production
+# Logs
+logs/
+*.log
 
-logs/*.log
-
+# Cobertura
 coverage/
 
-.vscode/
+# Archivos temporales
+.tmp/
+temp/
+.cache/
 
+# Editores
+.vscode/
 .idea/
 
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos locales
 POST/
