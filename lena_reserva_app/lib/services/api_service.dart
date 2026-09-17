@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/reservation.dart';
@@ -34,17 +36,8 @@ class AIResponse {
   final String answer;
   final String? role;
 
-  /// Datos detectados para una posible reserva.
-  ///
-  /// Ejemplo:
-  /// {
-  ///   "people": 4,
-  ///   "date": "2026-09-16",
-  ///   "time": "20:00"
-  /// }
   final Map<String, dynamic>? reservationDraft;
 
-  /// Disponibilidad real devuelta por el backend.
   final AIAvailability? availability;
 }
 
@@ -79,10 +72,59 @@ class AIAvailability {
 }
 
 class ApiService {
-  static const baseUrl = String.fromEnvironment(
+  // =========================================================
+  // DIRECCIONES DEL BACKEND
+  // =========================================================
+
+  /// Emulador Android:
+  /// 10.0.2.2 apunta al localhost de la computadora.
+  static const String emulatorBaseUrl = 'http://10.0.2.2:3000';
+
+  /// Teléfono físico conectado a la misma red que la PC.
+  static const String physicalDeviceBaseUrl = 'http://192.168.1.3:3000';
+
+  /// Permite sobrescribir la URL usando:
+  ///
+  /// flutter run --dart-define=API_BASE_URL=http://192.168.1.3:3000
+  ///
+  static const String configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000',
+    defaultValue: '',
   );
+
+  /// URL que utilizará la aplicación.
+  ///
+  /// Android físico  -> 192.168.1.3:3000
+  /// Android emulador -> 10.0.2.2:3000
+  /// Web              -> 192.168.1.3:3000
+  static String get baseUrl {
+    if (configuredBaseUrl.isNotEmpty) {
+      return configuredBaseUrl;
+    }
+
+    if (kIsWeb) {
+      return physicalDeviceBaseUrl;
+    }
+
+    if (Platform.isAndroid) {
+      // Android físico y emulador:
+      //
+      // Por defecto usamos la IP de la PC para que también
+      // funcione en el teléfono físico.
+      //
+      // Para el emulador también podemos ejecutar con:
+      //
+      // flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
+      //
+      return physicalDeviceBaseUrl;
+    }
+
+    return physicalDeviceBaseUrl;
+  }
+
+  // =========================================================
+  // HEADERS
+  // =========================================================
 
   static Map<String, String> _authorizationHeaders(String token) {
     return {'Authorization': 'Bearer $token'};
@@ -93,8 +135,15 @@ class ApiService {
   // =========================================================
 
   static Future<Map<String, dynamic>> healthCheck() async {
+    final url = '$baseUrl/api/health';
+
+    print('========================================');
+    print('API HEALTH');
+    print('URL: $url');
+    print('========================================');
+
     final response = await http
-        .get(Uri.parse('$baseUrl/api/health'))
+        .get(Uri.parse(url))
         .timeout(const Duration(seconds: 10));
 
     return _decode(response);
@@ -108,13 +157,27 @@ class ApiService {
     String correo,
     String password,
   ) async {
+    final url = '$baseUrl/api/auth/login';
+
+    print('========================================');
+    print('LOGIN');
+    print('URL: $url');
+    print('Correo: $correo');
+    print('========================================');
+
     final response = await http
         .post(
-          Uri.parse('$baseUrl/api/auth/login'),
-          headers: {'Content-Type': 'application/json'},
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
           body: jsonEncode({'correo': correo, 'password': password}),
         )
         .timeout(const Duration(seconds: 10));
+
+    print('LOGIN STATUS: ${response.statusCode}');
+    print('LOGIN BODY: ${response.body}');
 
     return _decode(response);
   }
@@ -157,7 +220,10 @@ class ApiService {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/auth/reset-password'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
           body: jsonEncode({
             'correo': correo.trim(),
             'codigo': codigo.trim(),
@@ -179,7 +245,10 @@ class ApiService {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/auth/register'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
           body: jsonEncode({
             'nombre': nombre,
             'apellido': apellido,

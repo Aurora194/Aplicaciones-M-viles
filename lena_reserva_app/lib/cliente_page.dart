@@ -1,11 +1,234 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'auth/auth_scope.dart';
 import 'design/app_colors.dart';
 import 'services/api_service.dart';
+import 'services/camera_service.dart';
+import 'services/profile_photo_service.dart';
 
-class ClientePage extends StatelessWidget {
+class ClientePage extends StatefulWidget {
   const ClientePage({super.key});
+
+  @override
+  State<ClientePage> createState() => _ClientePageState();
+}
+
+class _ClientePageState extends State<ClientePage> {
+  Uint8List? _profilePhoto;
+  bool _loadingPhoto = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfilePhoto();
+  }
+
+  Future<void> _loadProfilePhoto() async {
+    final photo = await ProfilePhotoService.loadPhoto();
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhoto = photo;
+      _loadingPhoto = false;
+    });
+  }
+
+  Future<void> _takeProfilePhoto() async {
+    final shouldContinue = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Tomar foto de perfil'),
+          content: const Text(
+            'Leña Reserva necesita utilizar la cámara del dispositivo '
+            'para tomar una foto de perfil. La foto se guardará de forma '
+            'local en este dispositivo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Continuar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldContinue != true || !mounted) {
+      return;
+    }
+
+    final result = await CameraService.takePhoto();
+
+    if (!mounted) return;
+
+    switch (result.status) {
+      case CameraStatus.granted:
+        if (result.file == null) {
+          await _showMessage(
+            title: 'No se pudo obtener la foto',
+            message: 'La cámara no devolvió una imagen válida.',
+          );
+          return;
+        }
+
+        try {
+          await ProfilePhotoService.savePhoto(result.file!);
+
+          final photo = await ProfilePhotoService.loadPhoto();
+
+          if (!mounted) return;
+
+          setState(() {
+            _profilePhoto = photo;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Foto de perfil guardada correctamente.'),
+            ),
+          );
+        } catch (_) {
+          await _showMessage(
+            title: 'No se pudo guardar',
+            message:
+                'La foto fue tomada, pero no se pudo guardar en el dispositivo.',
+          );
+        }
+        break;
+
+      case CameraStatus.denied:
+        await _showCameraDenied();
+        break;
+
+      case CameraStatus.permanentlyDenied:
+        await _showCameraPermanentlyDenied();
+        break;
+
+      case CameraStatus.restricted:
+        await _showMessage(
+          title: 'Cámara restringida',
+          message:
+              'El sistema del dispositivo restringe el acceso a la cámara. '
+              'Revisa los controles de privacidad o permisos del dispositivo.',
+        );
+        break;
+
+      case CameraStatus.unavailable:
+        await _showMessage(
+          title: 'Cámara no disponible',
+          message:
+              'La cámara no está disponible en este dispositivo en este momento.',
+        );
+        break;
+
+      case CameraStatus.cancelled:
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Captura cancelada.')));
+        break;
+
+      case CameraStatus.error:
+        await _showMessage(
+          title: 'Error de cámara',
+          message: 'No fue posible acceder a la cámara. Intenta nuevamente.',
+        );
+        break;
+    }
+  }
+
+  Future<void> _showCameraDenied() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Permiso de cámara denegado'),
+          content: const Text(
+            'No se concedió el permiso para utilizar la cámara. '
+            'Puedes volver a intentarlo cuando quieras.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showCameraPermanentlyDenied() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Permiso bloqueado'),
+          content: const Text(
+            'El acceso a la cámara está bloqueado para esta aplicación. '
+            'Para volver a utilizarla, debes habilitar el permiso desde '
+            'los ajustes del dispositivo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+
+                await CameraService.openSettings();
+              },
+              child: const Text('Abrir ajustes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showMessage({
+    required String title,
+    required String message,
+  }) async {
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,10 +236,6 @@ class ClientePage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F7F6),
-
-      // ============================================================
-      // APP BAR
-      // ============================================================
       appBar: AppBar(
         title: const Text(
           'Cliente',
@@ -28,9 +247,7 @@ class ClientePage extends StatelessWidget {
             onPressed: () async {
               await auth.signOut();
 
-              if (!context.mounted) {
-                return;
-              }
+              if (!context.mounted) return;
 
               Navigator.of(
                 context,
@@ -40,34 +257,22 @@ class ClientePage extends StatelessWidget {
           ),
         ],
       ),
-
-      // ============================================================
-      // CONTENIDO
-      // ============================================================
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
           children: [
-            // ======================================================
-            // BIENVENIDA
-            // ======================================================
-            _WelcomeCard(name: auth.userName ?? 'Usuario'),
-
+            _WelcomeCard(
+              name: auth.userName ?? 'Usuario',
+              photo: _profilePhoto,
+              loadingPhoto: _loadingPhoto,
+              onTakePhoto: _takeProfilePhoto,
+            ),
             const SizedBox(height: 28),
-
-            // ======================================================
-            // OPCIONES
-            // ======================================================
             const Text(
               'Mis opciones',
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 14),
-
-            // ======================================================
-            // MIS RESERVAS
-            // ======================================================
             _OptionCard(
               icon: Icons.calendar_month_outlined,
               title: 'Ver mis reservas',
@@ -77,12 +282,7 @@ class ClientePage extends StatelessWidget {
                 Navigator.pushNamed(context, '/app/reservas');
               },
             ),
-
             const SizedBox(height: 14),
-
-            // ======================================================
-            // NUEVA RESERVA
-            // ======================================================
             _OptionCard(
               icon: Icons.add_circle_outline,
               title: 'Nueva reserva',
@@ -92,12 +292,7 @@ class ClientePage extends StatelessWidget {
                 Navigator.pushNamed(context, '/app/reservas/nueva');
               },
             ),
-
             const SizedBox(height: 14),
-
-            // ======================================================
-            // DISPONIBILIDAD
-            // ======================================================
             _OptionCard(
               icon: Icons.table_restaurant_outlined,
               title: 'Consultar disponibilidad',
@@ -109,20 +304,11 @@ class ClientePage extends StatelessWidget {
                 _showAvailability(context);
               },
             ),
-
             const SizedBox(height: 28),
-
-            // ======================================================
-            // INFORMACIÓN
-            // ======================================================
             const _InformationCard(),
           ],
         ),
       ),
-
-      // ============================================================
-      // BOTÓN FLOTANTE - ASISTENTE LEÑA
-      // ============================================================
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'cliente_ai_fab',
         backgroundColor: AppColors.primary,
@@ -137,14 +323,9 @@ class ClientePage extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
-
-  // ==============================================================
-  // MOSTRAR DISPONIBILIDAD
-  // ==============================================================
 
   Future<void> _showAvailability(BuildContext context) async {
     final auth = AuthScope.of(context);
@@ -152,9 +333,7 @@ class ClientePage extends StatelessWidget {
     if (!auth.isAuthenticated ||
         auth.accessToken == null ||
         auth.accessToken!.isEmpty) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
 
       Navigator.pushReplacementNamed(context, '/login', arguments: '/cliente');
 
@@ -169,75 +348,124 @@ class ClientePage extends StatelessWidget {
   }
 }
 
-// ==================================================================
-// TARJETA DE BIENVENIDA
-// ==================================================================
-
 class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard({required this.name});
+  const _WelcomeCard({
+    required this.name,
+    required this.photo,
+    required this.loadingPhoto,
+    required this.onTakePhoto,
+  });
 
   final String name;
+  final Uint8List? photo;
+  final bool loadingPhoto;
+  final VoidCallback onTakePhoto;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
-      color: const Color(0xFFF1EDEA),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                ),
+                child: ClipOval(
+                  child: loadingPhoto
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                        )
+                      : photo != null
+                      ? Image.memory(
+                          photo!,
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                        )
+                      : Icon(
+                          Icons.person_outline,
+                          size: 36,
+                          color: AppColors.primary,
+                        ),
+                ),
               ),
-              child: Icon(
-                Icons.person_outline,
-                size: 30,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bienvenido $name',
-                    style: const TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF292525),
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: Material(
+                  color: AppColors.primary,
+                  shape: const CircleBorder(),
+                  elevation: 3,
+                  child: InkWell(
+                    onTap: onTakePhoto,
+                    customBorder: const CircleBorder(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.camera_alt_outlined,
+                        size: 18,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Desde aquí puedes administrar tus reservas.',
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.4,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ],
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Bienvenido',
+                  style: TextStyle(fontSize: 15, color: Colors.black54),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Gestiona tus reservas en Leña.',
+                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
-
-// ==================================================================
-// OPCIÓN
-// ==================================================================
 
 class _OptionCard extends StatelessWidget {
   const _OptionCard({
@@ -256,35 +484,29 @@ class _OptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
+      elevation: 0,
       child: InkWell(
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE7E2DF)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 8,
-                offset: Offset(0, 3),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
           ),
           child: Row(
             children: [
               Container(
-                width: 55,
-                height: 55,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: AppColors.primary, size: 28),
+                child: Icon(icon, color: AppColors.primary, size: 26),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 15),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,27 +515,23 @@ class _OptionCard extends StatelessWidget {
                       title,
                       style: const TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.textSecondary,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.35,
+                        color: Colors.black54,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 17,
-                color: AppColors.textSecondary,
-              ),
+              const Icon(Icons.chevron_right, color: Colors.black38),
             ],
           ),
         ),
@@ -322,52 +540,38 @@ class _OptionCard extends StatelessWidget {
   }
 }
 
-// ==================================================================
-// INFORMACIÓN
-// ==================================================================
-
 class _InformationCard extends StatelessWidget {
   const _InformationCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(19),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE4E0DD)),
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.info_outline, color: AppColors.primary),
-          ),
-          const SizedBox(width: 13),
+          Icon(Icons.info_outline, color: AppColors.primary, size: 24),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Información para clientes',
+                  'Información',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 6),
                 Text(
-                  'Puedes crear, consultar, modificar y cancelar '
-                  'tus propias reservas. Las reservas de otros clientes '
-                  'no son visibles para tu cuenta.',
+                  'Puedes consultar tus reservas, crear una nueva '
+                  'reserva y verificar la disponibilidad de mesas.',
                   style: TextStyle(
-                    fontSize: 13,
-                    height: 1.45,
-                    color: AppColors.textSecondary,
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: Colors.black.withValues(alpha: 0.65),
                   ),
                 ),
               ],
@@ -379,10 +583,6 @@ class _InformationCard extends StatelessWidget {
   }
 }
 
-// ==================================================================
-// DIÁLOGO DE DISPONIBILIDAD
-// ==================================================================
-
 class _AvailabilityDialog extends StatefulWidget {
   const _AvailabilityDialog();
 
@@ -391,13 +591,13 @@ class _AvailabilityDialog extends StatefulWidget {
 }
 
 class _AvailabilityDialogState extends State<_AvailabilityDialog> {
-  DateTime? selectedDate;
-  TimeOfDay? selectedTime;
+  late DateTime selectedDate;
+  late TimeOfDay selectedTime;
 
   bool loading = false;
-  String? error;
+  String? errorMessage;
 
-  List<Map<String, dynamic>> tables = const [];
+  List<dynamic> mesas = [];
 
   @override
   void initState() {
@@ -409,328 +609,300 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
     selectedTime = const TimeOfDay(hour: 19, minute: 0);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      _loadAvailability();
-    });
+    _loadAvailability();
   }
 
   DateTime get selectedDateTime {
-    final date = selectedDate!;
-
-    final time = selectedTime ?? const TimeOfDay(hour: 19, minute: 0);
-
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
   }
-
-  // ==============================================================
-  // FECHA
-  // ==============================================================
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final now = DateTime.now();
+
+    final result = await showDatePicker(
       context: context,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDate: selectedDate ?? DateTime.now(),
+      initialDate: selectedDate.isBefore(DateTime(now.year, now.month, now.day))
+          ? now
+          : selectedDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 1, now.month, now.day),
     );
 
-    if (picked == null || !mounted) {
-      return;
-    }
+    if (result == null || !mounted) return;
 
     setState(() {
-      selectedDate = DateTime(picked.year, picked.month, picked.day);
+      selectedDate = result;
     });
 
     await _loadAvailability();
   }
-
-  // ==============================================================
-  // HORA
-  // ==============================================================
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    final result = await showTimePicker(
       context: context,
-      initialTime: selectedTime ?? const TimeOfDay(hour: 19, minute: 0),
+      initialTime: selectedTime,
     );
 
-    if (picked == null || !mounted) {
-      return;
-    }
+    if (result == null || !mounted) return;
 
     setState(() {
-      selectedTime = picked;
+      selectedTime = result;
     });
 
     await _loadAvailability();
   }
 
-  // ==============================================================
-  // CONSULTAR DISPONIBILIDAD
-  // ==============================================================
-
   Future<void> _loadAvailability() async {
-    if (!mounted) {
+    final auth = AuthScope.of(context);
+
+    final token = auth.accessToken;
+
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        errorMessage = 'La sesión no es válida.';
+        loading = false;
+      });
+
       return;
     }
 
     setState(() {
       loading = true;
-      error = null;
+      errorMessage = null;
     });
 
     try {
-      final auth = AuthScope.of(context);
-
-      final token = auth.accessToken;
-
-      if (!auth.isAuthenticated || token == null || token.isEmpty) {
-        throw const ApiException(
-          401,
-          'La sesión ha expirado. Inicie sesión nuevamente.',
-        );
-      }
-
-      final date = selectedDateTime;
-
-      debugPrint(
-        'CLIENTE - FECHA CONSULTADA: '
-        '${date.toIso8601String()}',
+      final result = await ApiService.getAvailableTables(
+        token,
+        date: selectedDateTime,
       );
 
-      final result = await ApiService.getAvailableTables(token, date: date);
-
-      debugPrint('CLIENTE - MESAS RECIBIDAS: $result');
-
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
-        tables = result;
+        mesas = result;
         loading = false;
       });
-    } on ApiException catch (exception) {
-      if (!mounted) {
-        return;
-      }
+    } catch (error) {
+      if (!mounted) return;
 
-      if (exception.statusCode == 401) {
-        await AuthScope.of(context).signOut();
+      final message = error.toString();
 
-        if (!mounted) {
-          return;
-        }
+      if (message.contains('401')) {
+        await auth.signOut();
+
+        if (!mounted) return;
 
         Navigator.of(context).pop();
 
-        Navigator.pushReplacementNamed(
+        Navigator.of(
           context,
-          '/login',
-          arguments: '/cliente',
-        );
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
 
         return;
       }
 
       setState(() {
         loading = false;
-        tables = [];
-        error = exception.message;
+        errorMessage = 'No fue posible consultar la disponibilidad.';
       });
-    } catch (exception) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        loading = false;
-        tables = [];
-        error = 'No se pudo consultar la disponibilidad.';
-      });
-
-      debugPrint('CLIENTE - ERROR DISPONIBILIDAD: $exception');
     }
   }
 
-  // ==============================================================
-  // TEXTO FECHA
-  // ==============================================================
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
 
-  String _dateLabel() {
-    if (selectedDate == null) {
-      return 'Seleccionar fecha';
-    }
-
-    return '${selectedDate!.day.toString().padLeft(2, '0')}/'
-        '${selectedDate!.month.toString().padLeft(2, '0')}/'
-        '${selectedDate!.year}';
+    return '$day/$month/$year';
   }
 
-  // ==============================================================
-  // TEXTO HORA
-  // ==============================================================
+  String _formatTime(TimeOfDay time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
 
-  String _timeLabel() {
-    if (selectedTime == null) {
-      return 'Seleccionar hora';
-    }
-
-    return selectedTime!.format(context);
+    return '$hour:$minute';
   }
 
-  // ==============================================================
-  // BUILD
-  // ==============================================================
+  String _getMesaNumero(dynamic mesa) {
+    if (mesa is Map) {
+      return '${mesa['numero'] ?? mesa['nombre'] ?? 'Mesa'}';
+    }
+
+    return 'Mesa';
+  }
+
+  String _getMesaCapacidad(dynamic mesa) {
+    if (mesa is Map) {
+      return '${mesa['capacidad'] ?? '-'} personas';
+    }
+
+    return '- personas';
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      title: Row(
-        children: [
-          Icon(Icons.table_restaurant_outlined, color: AppColors.primary),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Consultar disponibilidad',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
+      title: const Text(
+        'Consultar disponibilidad',
+        style: TextStyle(fontWeight: FontWeight.w800),
       ),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: loading ? null : _pickDate,
-                    icon: const Icon(Icons.calendar_today_outlined),
-                    label: Text(_dateLabel()),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                      label: Text(_formatDate(selectedDate)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: loading ? null : _pickTime,
-                    icon: const Icon(Icons.access_time_outlined),
-                    label: Text(_timeLabel()),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.access_time_outlined, size: 18),
+                      label: Text(_formatTime(selectedTime)),
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (loading)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(),
+                )
+              else if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 42,
+                        color: Colors.redAccent,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(errorMessage!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _loadAvailability,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (mesas.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.table_restaurant_outlined,
+                        size: 42,
+                        color: Colors.black38,
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'No hay mesas disponibles para la fecha y hora seleccionadas.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${mesas.length} mesa(s) disponible(s)',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
+                    ...mesas.map(
+                      (mesa) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.10,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.table_restaurant,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _getMesaNumero(mesa),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    _getMesaCapacidad(mesa),
+                                    style: const TextStyle(
+                                      color: Colors.black54,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.check_circle_outline,
+                              color: Colors.green,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildContent(),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () {
-            Navigator.pop(context);
+            Navigator.of(context).pop();
           },
           child: const Text('Cerrar'),
         ),
       ],
-    );
-  }
-
-  // ==============================================================
-  // CONTENIDO
-  // ==============================================================
-
-  Widget _buildContent() {
-    if (loading) {
-      return const SizedBox(
-        height: 180,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (error != null) {
-      return SizedBox(
-        height: 180,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 42,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 10),
-            Text(error!, textAlign: TextAlign.center),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _loadAvailability,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (tables.isEmpty) {
-      return const SizedBox(
-        height: 180,
-        child: Center(
-          child: Text(
-            'No hay mesas disponibles para la fecha '
-            'y hora seleccionadas.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 300,
-      child: ListView.separated(
-        itemCount: tables.length,
-        separatorBuilder: (_, __) {
-          return const Divider(height: 1);
-        },
-        itemBuilder: (context, index) {
-          final table = tables[index];
-
-          final number = table['numero'] ?? table['id'] ?? '-';
-
-          final capacity = table['capacidad'];
-
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Container(
-              width: 45,
-              height: 45,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.table_restaurant_outlined,
-                color: AppColors.primary,
-              ),
-            ),
-            title: Text(
-              'Mesa $number',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: capacity == null
-                ? null
-                : Text('Capacidad: $capacity personas'),
-          );
-        },
-      ),
     );
   }
 }
