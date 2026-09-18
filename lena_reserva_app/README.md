@@ -19,13 +19,12 @@ Aplicación móvil para gestionar reservas del restaurante **Leña Steak House**
 * **Android Emulator:** 37.1.11.0
 * **Dispositivo:** sdk gphone16k x86 64
 
-
-
 ## Backend
 
 * **Tecnologías:** Node.js, Express, TypeScript, Prisma y MySQL
 * **URL:** `http://localhost:3000`
 * **Swagger:** `http://localhost:3000/api/docs/`
+
 
 ## Instalación
 
@@ -64,6 +63,12 @@ Para Windows:
 ```text
 http://localhost:3000
 ```
+ 
+Para Dispositivo Fisico Infinix:
+
+```text
+http://192.168.1.3:3000
+```
 
 ## Endpoint probado
 
@@ -86,11 +91,38 @@ Detener:
 docker compose down
 ```
 
+## Cámara
+
+La aplicación incorpora una funcionalidad básica de cámara mediante Flutter para permitir la captura de fotografías desde el dispositivo Android.
+
+El funcionamiento básico consiste en:
+
+* Solicitar el permiso necesario para utilizar la cámara.
+* Abrir la cámara del dispositivo desde la aplicación.
+* Capturar una fotografía.
+* Obtener la imagen capturada para utilizarla dentro de la aplicación.
+
+La funcionalidad fue integrada para ejecutarse en el entorno Android utilizado durante las pruebas.
+
+## Notificaciones locales
+
+La aplicación incorpora notificaciones locales para mostrar avisos directamente en el dispositivo Android.
+
+El funcionamiento básico consiste en:
+
+* Solicitar los permisos necesarios para mostrar notificaciones.
+* Configurar el servicio de notificaciones locales.
+* Programar o generar una notificación desde la aplicación.
+* Mostrar el aviso directamente en el dispositivo.
+
+Las notificaciones locales permiten informar al usuario sobre eventos relacionados con la aplicación, como recordatorios o información asociada a las reservas, sin depender de un servicio externo de mensajería para su funcionamiento básico.
+
 ## Limitaciones
 
 * `sdkmanager` y `emulator` no están agregados al `PATH`.
 * Flutter detecta correctamente el SDK y el emulador.
 * Durante la ejecución aparecen algunas advertencias de Java/Gradle y `Skipped frames`, pero no impiden la ejecución.
+* Las funcionalidades de cámara y notificaciones dependen de los permisos correspondientes del sistema Android.
 
 ## Estado
 
@@ -99,42 +131,51 @@ docker compose down
 ✅ Emulador detectado
 ✅ APK compilado
 ✅ Aplicación ejecutada correctamente
+✅ Cámara integrada
+✅ Notificaciones locales integradas
 
 ## Sistema de diseño y componentes
 
 Se implementó un sistema de diseño reutilizable con tokens y un conjunto de widgets base para la app:
 
-- `lib/theme/app_colors.dart`: colores semánticos y brand tokens.
-- `lib/theme/app_spacing.dart`: espaciado base del sistema.
-- `lib/theme/app_radius.dart`: radios y forma visual consistente.
-- `lib/theme/app_theme.dart`: tema global de la aplicación.
-- `lib/widgets/app_button.dart`: boton reutilizable con loading y accesibilidad.
-- `lib/widgets/app_text_field.dart`: campo de texto con validación y semántica.
-- `lib/widgets/reservation_card.dart`: tarjeta de reserva accesible y visualmente consistente.
-- `lib/widgets/reservation_list.dart`: estados `LOADING`, `EMPTY`, `ERROR` y `SUCCESS`.
+* `lib/theme/app_colors.dart`: colores semánticos y brand tokens.
+* `lib/theme/app_spacing.dart`: espaciado base del sistema.
+* `lib/theme/app_radius.dart`: radios y forma visual consistente.
+* `lib/theme/app_theme.dart`: tema global de la aplicación.
+* `lib/widgets/app_button.dart`: botón reutilizable con loading y accesibilidad.
+* `lib/widgets/app_text_field.dart`: campo de texto con validación y semántica.
+* `lib/widgets/reservation_card.dart`: tarjeta de reserva accesible y visualmente consistente.
+* `lib/widgets/reservation_list.dart`: estados `LOADING`, `EMPTY`, `ERROR` y `SUCCESS`.
 
 ### Integración en una pantalla real
+
 La pantalla de login y la pantalla de dashboard incorporan el sistema de diseño y los nuevos componentes. La dashboard muestra un listado realista con reservas, una cabecera resumen y respuestas adaptables a diferentes tamaños de pantalla.
 
 ### Accesibilidad
+
 Se agregaron `Semantics` y `tooltip` para que los controles sean más comprensibles para usuarios con asistencia técnica. Los campos y acciones tienen etiqueta semántica y el botón de inicio de sesión cuenta con estado de carga.
 
 ### Pruebas en diferentes tamaños
+
 La interfaz se adapta con `LayoutBuilder` y `MediaQuery.sizeOf(context)` para que la dashboard funcione bien en pantallas pequeñas y medianas. En tamaños compactos, los bloques se reorganizan sin romper el diseño.
 
 ## Evidencias
 
 ### Comandos ejecutados
+
 ```bash
 flutter clean
 flutter pub get
-yarn android
+flutter run -d adb-1088625449003117-eRFp8r._adb-tls-connect._tcp --dart-define=API_BASE_URL=http://192.168.1.3:3000
 ```
 
 ### Resultado esperado
-- App compilando en el emulador Android.
-- Pantalla de login con diseño modular y consistente.
-- Redirección hacia una dashboard con listado de reservas.
+
+* App compilando en el emulador Android.
+* Pantalla de login con diseño modular y consistente.
+* Redirección hacia una dashboard con listado de reservas.
+* Acceso a la cámara desde la aplicación.
+* Visualización de notificaciones locales en el dispositivo.
 
 ## Autor
 
