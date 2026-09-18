@@ -18,14 +18,19 @@ class NotificationService {
     importance: Importance.high,
   );
 
+  // ============================================================
+  // INICIALIZAR NOTIFICACIONES
+  // ============================================================
+
   static Future<void> initialize() async {
     if (_initialized) {
       return;
     }
 
+    // Inicializar zonas horarias.
     tz.initializeTimeZones();
 
-    // Ecuador UTC-5
+    // Ecuador UTC-5.
     tz.setLocalLocation(tz.getLocation('America/Guayaquil'));
 
     const androidSettings = AndroidInitializationSettings(
@@ -41,10 +46,15 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
 
+    // Crear canal de notificaciones.
     await androidPlugin?.createNotificationChannel(_channel);
 
     _initialized = true;
   }
+
+  // ============================================================
+  // SOLICITAR PERMISO DE NOTIFICACIONES
+  // ============================================================
 
   static Future<NotificationPermissionResult> requestPermission() async {
     await initialize();
@@ -80,9 +90,17 @@ class NotificationService {
     return NotificationPermissionResult.unavailable;
   }
 
+  // ============================================================
+  // ABRIR AJUSTES DE LA APLICACIÓN
+  // ============================================================
+
   static Future<bool> openSettings() async {
     return openAppSettings();
   }
+
+  // ============================================================
+  // MOSTRAR NOTIFICACIÓN DE RESERVA CREADA
+  // ============================================================
 
   static Future<void> showReservationCreated({
     required int reservationId,
@@ -112,6 +130,10 @@ class NotificationService {
     );
   }
 
+  // ============================================================
+  // PROGRAMAR RECORDATORIO
+  // ============================================================
+
   static Future<void> scheduleReservationReminder({
     required int reservationId,
     required DateTime reservationDateTime,
@@ -125,12 +147,15 @@ class NotificationService {
       return;
     }
 
+    // La fecha recibida representa la hora local de Ecuador.
     final scheduledDate = reservationDateTime.subtract(
       Duration(minutes: minutesBefore),
     );
 
+    // Hora actual de Ecuador.
     final now = tz.TZDateTime.now(tz.local);
 
+    // Convertir la fecha local de Ecuador a TZDateTime.
     final notificationDate = tz.TZDateTime(
       tz.local,
       scheduledDate.year,
@@ -141,6 +166,7 @@ class NotificationService {
       scheduledDate.second,
     );
 
+    // No programar notificaciones para fechas que ya pasaron.
     if (!notificationDate.isAfter(now)) {
       return;
     }
@@ -159,19 +185,66 @@ class NotificationService {
           priority: Priority.high,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+
+      // IMPORTANTE:
+      // Se utiliza inexactAllowWhileIdle para evitar
+      // exact_alarms_not_permitted.
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+
       payload: 'reserva:$reservationId',
     );
   }
 
+  // ============================================================
+  // CANCELAR NOTIFICACIONES DE UNA RESERVA
+  // ============================================================
+
   static Future<void> cancelReservationNotification(int reservationId) async {
     await initialize();
 
+    // Cancelar notificación de reserva creada.
     await _plugin.cancel(id: 1000 + reservationId);
+
+    // Cancelar recordatorio.
+    await _plugin.cancel(id: 2000 + reservationId);
+  }
+
+  // ============================================================
+  // CANCELAR SOLAMENTE EL RECORDATORIO
+  // ============================================================
+
+  static Future<void> cancelReservationReminder(int reservationId) async {
+    await initialize();
 
     await _plugin.cancel(id: 2000 + reservationId);
   }
+
+  // ============================================================
+  // CANCELAR SOLAMENTE LA NOTIFICACIÓN DE CREACIÓN
+  // ============================================================
+
+  static Future<void> cancelReservationCreated(int reservationId) async {
+    await initialize();
+
+    await _plugin.cancel(id: 1000 + reservationId);
+  }
+
+  // ============================================================
+  // COMPROBAR SI LAS NOTIFICACIONES ESTÁN PERMITIDAS
+  // ============================================================
+
+  static Future<bool> areNotificationsEnabled() async {
+    await initialize();
+
+    final permission = await Permission.notification.status;
+
+    return permission.isGranted;
+  }
 }
+
+// ================================================================
+// RESULTADO DEL PERMISO DE NOTIFICACIONES
+// ================================================================
 
 enum NotificationPermissionResult {
   granted,

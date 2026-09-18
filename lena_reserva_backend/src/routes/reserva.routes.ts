@@ -21,6 +21,10 @@ const router = Router();
  * /api/reservas:
  *   get:
  *     summary: Listar reservas
+ *     description: |
+ *       ADMIN puede consultar todas las reservas.
+ *       CLIENTE solamente puede consultar sus propias reservas.
+ *       Las reservas eliminadas lógicamente no aparecen.
  *     tags: [Reservas]
  *     security:
  *       - bearerAuth: []
@@ -39,7 +43,7 @@ const router = Router();
  *         name: cliente
  *         schema:
  *           type: string
- *         description: Buscar por nombre, apellido o correo
+ *         description: Buscar por nombre, apellido o correo.
  *       - in: query
  *         name: mesa
  *         schema:
@@ -83,6 +87,9 @@ router.get(
  * /api/reservas/{id}:
  *   get:
  *     summary: Obtener una reserva por ID
+ *     description: |
+ *       ADMIN puede consultar cualquier reserva activa.
+ *       CLIENTE solamente puede consultar sus propias reservas.
  *     tags: [Reservas]
  *     security:
  *       - bearerAuth: []
@@ -111,6 +118,10 @@ router.get(
  * /api/reservas:
  *   post:
  *     summary: Crear una reserva
+ *     description: |
+ *       Permite crear una reserva.
+ *       Si el usuario autenticado es CLIENTE,
+ *       el backend utiliza su propio ID.
  *     tags: [Reservas]
  *     security:
  *       - bearerAuth: []
@@ -166,6 +177,10 @@ router.post(
  * /api/reservas/{id}:
  *   put:
  *     summary: Actualizar una reserva
+ *     description: |
+ *       CLIENTE puede cancelar sus propias reservas.
+ *       ADMIN puede modificar y cambiar el estado de las reservas.
+ *       Una reserva cancelada no puede reactivarse.
  *     tags: [Reservas]
  *     security:
  *       - bearerAuth: []
@@ -206,7 +221,7 @@ router.post(
  *       200:
  *         description: Reserva actualizada correctamente.
  *       400:
- *         description: Error de validación.
+ *         description: Error de validación o permisos.
  *       404:
  *         description: Reserva no encontrada.
  *       401:
@@ -224,6 +239,10 @@ router.put(
  * /api/reservas/{id}:
  *   delete:
  *     summary: Eliminar una reserva
+ *     description: |
+ *       Solamente ADMIN puede eliminar una reserva.
+ *       La eliminación es lógica: el registro permanece
+ *       en la base de datos y se establece deletedAt.
  *     tags: [Reservas]
  *     security:
  *       - bearerAuth: []
@@ -236,10 +255,12 @@ router.put(
  *     responses:
  *       200:
  *         description: Reserva eliminada correctamente.
+ *       401:
+ *         description: Token inválido o inexistente.
+ *       403:
+ *         description: El usuario no tiene permisos de administrador.
  *       404:
  *         description: Reserva no encontrada.
- *       401:
- *         description: Token inválido.
  */
 router.delete(
   "/:id",
@@ -248,3 +269,4 @@ router.delete(
 );
 
 export default router;
+

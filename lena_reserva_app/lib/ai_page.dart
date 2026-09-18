@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -21,10 +22,8 @@ class _ChatMessage {
   final bool isUser;
   final DateTime? time;
 
-  /// Mesas disponibles asociadas al mensaje.
   final List<dynamic>? mesas;
 
-  /// Datos de una posible reserva detectada por la IA.
   final int? people;
   final DateTime? date;
   final TimeOfDay? timeOfDay;
@@ -323,19 +322,11 @@ class _AIPageState extends State<AIPage> {
     _scrollToBottom();
 
     try {
-      debugPrint('========================================');
-      debugPrint('AI - MENSAJE');
-      debugPrint(message);
-      debugPrint('AI - API BASE URL: ${ApiService.baseUrl}');
-      debugPrint('========================================');
+      debugPrint('AI - Enviando consulta...');
+      debugPrint('AI - API: ${ApiService.baseUrl}');
+      debugPrint('AI - Autenticación disponible: ${token.isNotEmpty}');
 
       final result = await ApiService.askAI(token: token, message: message);
-
-      debugPrint('AI - RESPUESTA RECIBIDA');
-      debugPrint('AI - ANSWER: ${result.answer}');
-      debugPrint('AI - ROLE: ${result.role}');
-      debugPrint('AI - AVAILABILITY: ${result.availability}');
-      debugPrint('AI - DRAFT: ${result.reservationDraft}');
 
       final answer = _cleanMarkdown(result.answer);
 
@@ -351,29 +342,11 @@ class _AIPageState extends State<AIPage> {
               .toList() ??
           <dynamic>[];
 
-      debugPrint('AI - MESAS DISPONIBLES: $mesas');
-
-      if (!mounted) {
-        return;
-      }
-
       // ========================================================
       // BORRADOR DE RESERVA
       // ========================================================
 
       final draft = result.reservationDraft;
-
-      debugPrint('========================================');
-      debugPrint('AI - RESERVATION DRAFT');
-      debugPrint('AI - draft: $draft');
-
-      debugPrint('AI - people: ${_mapValue(draft, 'people')}');
-
-      debugPrint('AI - date: ${_mapValue(draft, 'date')}');
-
-      debugPrint('AI - time: ${_mapValue(draft, 'time')}');
-
-      debugPrint('========================================');
 
       final peopleValue = _mapValue(draft, 'people');
       final dateValue = _mapValue(draft, 'date');
@@ -383,15 +356,8 @@ class _AIPageState extends State<AIPage> {
       final date = _parseDate(dateValue);
       final time = _parseTime(timeValue);
 
-      debugPrint('AI - PERSONAS PARSEADAS: $people');
-      debugPrint('AI - FECHA PARSEADA ECUADOR: $date');
-
-      if (time != null) {
-        debugPrint(
-          'AI - HORA PARSEADA ECUADOR: '
-          '${time.hour.toString().padLeft(2, '0')}:'
-          '${time.minute.toString().padLeft(2, '0')}',
-        );
+      if (!mounted) {
+        return;
       }
 
       // ========================================================
@@ -431,13 +397,6 @@ class _AIPageState extends State<AIPage> {
         return;
       }
 
-      debugPrint('========================================');
-      debugPrint('AI - API EXCEPTION');
-      debugPrint('AI - STATUS: ${exception.statusCode}');
-      debugPrint('AI - MESSAGE: ${exception.message}');
-      debugPrint('AI - FIELD ERRORS: ${exception.fieldErrors}');
-      debugPrint('========================================');
-
       // ========================================================
       // SESIÓN VENCIDA
       // ========================================================
@@ -459,7 +418,8 @@ class _AIPageState extends State<AIPage> {
       if (exception.statusCode >= 500) {
         errorMessage =
             'El servidor del asistente presentó un problema. '
-            'Verifica que el backend esté funcionando e inténtalo nuevamente.';
+            'Verifica que el backend esté funcionando '
+            'e inténtalo nuevamente.';
       } else if (exception.statusCode == 403) {
         errorMessage = 'No tienes autorización para utilizar el asistente.';
       } else if (exception.statusCode == 422) {
@@ -479,12 +439,10 @@ class _AIPageState extends State<AIPage> {
       });
 
       _scrollToBottom();
-    } on SocketException catch (exception) {
+    } on SocketException {
       if (!mounted) {
         return;
       }
-
-      debugPrint('AI - SOCKET ERROR: $exception');
 
       setState(() {
         _messages.add(
@@ -500,12 +458,29 @@ class _AIPageState extends State<AIPage> {
       });
 
       _scrollToBottom();
-    } on FormatException catch (exception) {
+    } on TimeoutException {
       if (!mounted) {
         return;
       }
 
-      debugPrint('AI - FORMAT ERROR: $exception');
+      setState(() {
+        _messages.add(
+          _ChatMessage(
+            text:
+                'El asistente está tardando demasiado en responder. '
+                'El servidor puede estar procesando la solicitud. '
+                'Inténtalo nuevamente en unos segundos.',
+            isUser: false,
+            time: DateTime.now(),
+          ),
+        );
+      });
+
+      _scrollToBottom();
+    } on FormatException {
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _messages.add(
@@ -520,16 +495,10 @@ class _AIPageState extends State<AIPage> {
       });
 
       _scrollToBottom();
-    } catch (exception) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
-
-      debugPrint('========================================');
-      debugPrint('AI - ERROR NO CONTROLADO');
-      debugPrint('AI - ERROR: $exception');
-      debugPrint('AI - TIPO: ${exception.runtimeType}');
-      debugPrint('========================================');
 
       setState(() {
         _messages.add(
@@ -608,10 +577,6 @@ class _AIPageState extends State<AIPage> {
       return null;
     }
 
-    // ----------------------------------------------------------
-    // YYYY-MM-DD
-    // ----------------------------------------------------------
-
     final simpleDate = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(text);
 
     if (simpleDate != null) {
@@ -631,10 +596,6 @@ class _AIPageState extends State<AIPage> {
         return DateTime(year, month, day);
       }
     }
-
-    // ----------------------------------------------------------
-    // ISO
-    // ----------------------------------------------------------
 
     final parsedDate = DateTime.tryParse(text);
 
@@ -666,12 +627,6 @@ class _AIPageState extends State<AIPage> {
       return null;
     }
 
-    debugPrint('AI - HORA ORIGINAL RECIBIDA: $text');
-
-    // ----------------------------------------------------------
-    // HH:mm
-    // ----------------------------------------------------------
-
     final simpleMatch = RegExp(
       r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$',
     ).firstMatch(text);
@@ -699,17 +654,8 @@ class _AIPageState extends State<AIPage> {
         return null;
       }
 
-      debugPrint(
-        'AI - HORA SIMPLE INTERPRETADA COMO ECUADOR: '
-        '$hour:$minute',
-      );
-
       return TimeOfDay(hour: hour, minute: minute);
     }
-
-    // ----------------------------------------------------------
-    // ISO
-    // ----------------------------------------------------------
 
     final parsedDate = DateTime.tryParse(text);
 
@@ -725,18 +671,8 @@ class _AIPageState extends State<AIPage> {
               parsedDate.second,
             );
 
-      debugPrint(
-        'AI - HORA ISO CONVERTIDA A ECUADOR: '
-        '${ecuadorDate.hour.toString().padLeft(2, '0')}:'
-        '${ecuadorDate.minute.toString().padLeft(2, '0')}',
-      );
-
       return TimeOfDay(hour: ecuadorDate.hour, minute: ecuadorDate.minute);
     }
-
-    // ----------------------------------------------------------
-    // Buscar HH:mm dentro del texto
-    // ----------------------------------------------------------
 
     final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(text);
 
@@ -783,50 +719,9 @@ class _AIPageState extends State<AIPage> {
       return;
     }
 
-    final ecuadorDateTime = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-
-    final utcDateTime = _ecuadorToUtc(ecuadorDateTime);
-
-    debugPrint('========================================');
-    debugPrint('AI - RESERVA DETECTADA');
-    debugPrint('Personas: $people');
-
-    debugPrint(
-      'Fecha Ecuador: '
-      '${date.year}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}',
-    );
-
-    debugPrint(
-      'Hora Ecuador: '
-      '${time.hour.toString().padLeft(2, '0')}:'
-      '${time.minute.toString().padLeft(2, '0')}',
-    );
-
-    debugPrint('UTC: ${utcDateTime.toIso8601String()}');
-
-    debugPrint('Mesas disponibles: ${mesas.length}');
-
-    debugPrint('========================================');
-
-    // ----------------------------------------------------------
-    // SI NO HAY MESAS
-    // ----------------------------------------------------------
-
     if (mesas.isEmpty) {
       return;
     }
-
-    // ----------------------------------------------------------
-    // MOSTRAR MESAS
-    // ----------------------------------------------------------
 
     final selectedTable = await showModalBottomSheet<dynamic>(
       context: context,
@@ -845,10 +740,6 @@ class _AIPageState extends State<AIPage> {
     if (!mounted || selectedTable == null) {
       return;
     }
-
-    // ----------------------------------------------------------
-    // OBTENER ID
-    // ----------------------------------------------------------
 
     int? tableId;
 
@@ -878,10 +769,6 @@ class _AIPageState extends State<AIPage> {
       return;
     }
 
-    // ----------------------------------------------------------
-    // PASAR DATOS A NUEVA RESERVA
-    // ----------------------------------------------------------
-
     CreateReservationPage.draftPeople = people.toString();
 
     CreateReservationPage.draftDate = DateTime(date.year, date.month, date.day);
@@ -893,19 +780,15 @@ class _AIPageState extends State<AIPage> {
 
     CreateReservationPage.draftTableId = tableId;
 
-    debugPrint('AI - MESA SELECCIONADA: $tableId');
-
     if (!mounted) {
       return;
     }
 
-    await Navigator.pushNamed(context, '/app/reservas/nueva');
-
-    // ----------------------------------------------------------
-    // LIMPIAR BORRADOR
-    // ----------------------------------------------------------
-
-    CreateReservationPage.draftTableId = null;
+    try {
+      await Navigator.pushNamed(context, '/app/reservas/nueva');
+    } finally {
+      CreateReservationPage.draftTableId = null;
+    }
   }
 
   // ============================================================
@@ -969,11 +852,8 @@ class _AIPageState extends State<AIPage> {
                       },
                     ),
             ),
-
             _buildQuickQuestions(),
-
             if (_sending) _buildTypingIndicator(),
-
             _buildInput(),
           ],
         ),
@@ -1004,9 +884,7 @@ class _AIPageState extends State<AIPage> {
               fontWeight: FontWeight.w700,
             ),
           ),
-
           const SizedBox(height: 7),
-
           SizedBox(
             height: 40,
             child: ListView.separated(
@@ -1055,7 +933,6 @@ class _AIPageState extends State<AIPage> {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       toolbarHeight: 68,
-
       leading: IconButton(
         tooltip: 'Regresar',
         icon: const Icon(
@@ -1067,9 +944,7 @@ class _AIPageState extends State<AIPage> {
           Navigator.pop(context);
         },
       ),
-
       titleSpacing: 0,
-
       title: Row(
         children: [
           Container(
@@ -1085,9 +960,7 @@ class _AIPageState extends State<AIPage> {
               size: 24,
             ),
           ),
-
           const SizedBox(width: 11),
-
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1102,9 +975,7 @@ class _AIPageState extends State<AIPage> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 SizedBox(height: 2),
-
                 Text(
                   'Reservas y disponibilidad',
                   maxLines: 1,
@@ -1120,7 +991,6 @@ class _AIPageState extends State<AIPage> {
           ),
         ],
       ),
-
       actions: [
         IconButton(
           tooltip: 'Limpiar conversación',
@@ -1160,7 +1030,6 @@ class _AIPageState extends State<AIPage> {
                 _buildAssistantAvatar(),
                 const SizedBox(width: 8),
               ],
-
               Flexible(
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 390),
@@ -1203,7 +1072,6 @@ class _AIPageState extends State<AIPage> {
               ),
             ],
           ),
-
           if (message.time != null)
             Padding(
               padding: EdgeInsets.only(
@@ -1222,7 +1090,6 @@ class _AIPageState extends State<AIPage> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-
                   if (isUser) ...[
                     const SizedBox(width: 4),
                     const Icon(
@@ -1234,7 +1101,6 @@ class _AIPageState extends State<AIPage> {
                 ],
               ),
             ),
-
           if (!isUser && message.mesas != null && message.mesas!.isNotEmpty)
             _buildAvailableTables(
               message.mesas!,
@@ -1350,9 +1216,7 @@ class _AIPageState extends State<AIPage> {
                   color: _primaryColor,
                 ),
               ),
-
               const SizedBox(width: 9),
-
               const Expanded(
                 child: Text(
                   'Mesas disponibles',
@@ -1363,7 +1227,6 @@ class _AIPageState extends State<AIPage> {
                   ),
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -1381,10 +1244,8 @@ class _AIPageState extends State<AIPage> {
               ),
             ],
           ),
-
           if (people != null && date != null && time != null) ...[
             const SizedBox(height: 9),
-
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1399,9 +1260,7 @@ class _AIPageState extends State<AIPage> {
                     size: 15,
                     color: _secondaryTextColor,
                   ),
-
                   const SizedBox(width: 7),
-
                   Expanded(
                     child: Text(
                       '$people personas • '
@@ -1419,9 +1278,7 @@ class _AIPageState extends State<AIPage> {
               ),
             ),
           ],
-
           const SizedBox(height: 10),
-
           ...mesas.map(
             (mesa) =>
                 _buildTableItem(mesa, people: people, date: date, time: time),
@@ -1446,7 +1303,6 @@ class _AIPageState extends State<AIPage> {
 
     if (mesa is Map) {
       numero = mesa['numero']?.toString() ?? '';
-
       capacidad = mesa['capacidad']?.toString() ?? '';
     }
 
@@ -1489,9 +1345,7 @@ class _AIPageState extends State<AIPage> {
                     size: 21,
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1506,9 +1360,7 @@ class _AIPageState extends State<AIPage> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-
                       const SizedBox(height: 3),
-
                       Text(
                         '$capacidad personas',
                         style: const TextStyle(
@@ -1520,10 +1372,8 @@ class _AIPageState extends State<AIPage> {
                     ],
                   ),
                 ),
-
                 if (hasReservationData) ...[
                   const SizedBox(width: 8),
-
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 9,
@@ -1563,7 +1413,7 @@ class _AIPageState extends State<AIPage> {
   }
 
   // ============================================================
-  // SELECCIONAR MESA DESDE LA TARJETA
+  // SELECCIONAR MESA DESDE TARJETA
   // ============================================================
 
   Future<void> _selectTableFromCard(
@@ -1609,18 +1459,15 @@ class _AIPageState extends State<AIPage> {
 
     CreateReservationPage.draftTableId = tableId;
 
-    debugPrint(
-      'AI - MESA SELECCIONADA DESDE TARJETA: '
-      '$tableId',
-    );
-
     if (!mounted) {
       return;
     }
 
-    await Navigator.pushNamed(context, '/app/reservas/nueva');
-
-    CreateReservationPage.draftTableId = null;
+    try {
+      await Navigator.pushNamed(context, '/app/reservas/nueva');
+    } finally {
+      CreateReservationPage.draftTableId = null;
+    }
   }
 
   // ============================================================
@@ -1673,9 +1520,7 @@ class _AIPageState extends State<AIPage> {
                 ),
               ),
             ),
-
             const SizedBox(width: 8),
-
             Material(
               color: _sending ? Colors.grey.shade400 : _primaryColor,
               borderRadius: BorderRadius.circular(30),
@@ -1711,12 +1556,6 @@ class _AIPageState extends State<AIPage> {
 // ==================================================================
 // COLORES DEL SELECTOR DE MESAS
 // ==================================================================
-//
-// IMPORTANTE:
-// _TableSelectionSheet está fuera de _AIPageState.
-// Por eso utiliza estos colores globales y no los privados
-// de _AIPageState.
-//
 
 const Color _aiPrimaryColor = Color(0xFF94152A);
 const Color _aiTextColor = Color(0xFF172033);
@@ -1762,9 +1601,6 @@ class _TableSelectionSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ----------------------------------------------------
-            // INDICADOR SUPERIOR
-            // ----------------------------------------------------
             Center(
               child: Container(
                 width: 45,
@@ -1775,12 +1611,7 @@ class _TableSelectionSheet extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // ----------------------------------------------------
-            // TÍTULO
-            // ----------------------------------------------------
             Row(
               children: [
                 Container(
@@ -1795,9 +1626,7 @@ class _TableSelectionSheet extends StatelessWidget {
                     color: _aiPrimaryColor,
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 const Expanded(
                   child: Text(
                     'Selecciona una mesa',
@@ -1810,12 +1639,7 @@ class _TableSelectionSheet extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
-            // ----------------------------------------------------
-            // INFORMACIÓN DE RESERVA
-            // ----------------------------------------------------
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
@@ -1830,9 +1654,7 @@ class _TableSelectionSheet extends StatelessWidget {
                     size: 17,
                     color: _aiSecondaryTextColor,
                   ),
-
                   const SizedBox(width: 6),
-
                   Expanded(
                     child: Text(
                       '$people personas • '
@@ -1848,12 +1670,7 @@ class _TableSelectionSheet extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 14),
-
-            // ----------------------------------------------------
-            // LISTA DE MESAS
-            // ----------------------------------------------------
             Flexible(
               child: ListView.separated(
                 shrinkWrap: true,
@@ -1899,9 +1716,7 @@ class _TableSelectionSheet extends StatelessWidget {
                                 color: _aiPrimaryColor,
                               ),
                             ),
-
                             const SizedBox(width: 12),
-
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1916,9 +1731,7 @@ class _TableSelectionSheet extends StatelessWidget {
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
-
                                   const SizedBox(height: 3),
-
                                   Text(
                                     '$capacidad personas',
                                     style: const TextStyle(
@@ -1929,7 +1742,6 @@ class _TableSelectionSheet extends StatelessWidget {
                                 ],
                               ),
                             ),
-
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
@@ -1950,12 +1762,7 @@ class _TableSelectionSheet extends StatelessWidget {
                 },
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // ----------------------------------------------------
-            // CANCELAR
-            // ----------------------------------------------------
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

@@ -85,7 +85,8 @@ class ApiService {
 
   /// Permite sobrescribir la URL usando:
   ///
-  /// flutter run --dart-define=API_BASE_URL=http://192.168.1.3:3000
+  /// flutter run
+  /// --dart-define=API_BASE_URL=http://192.168.1.3:3000
   ///
   static const String configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -93,10 +94,6 @@ class ApiService {
   );
 
   /// URL que utilizará la aplicación.
-  ///
-  /// Android físico  -> 192.168.1.3:3000
-  /// Android emulador -> 10.0.2.2:3000
-  /// Web              -> 192.168.1.3:3000
   static String get baseUrl {
     if (configuredBaseUrl.isNotEmpty) {
       return configuredBaseUrl;
@@ -107,15 +104,6 @@ class ApiService {
     }
 
     if (Platform.isAndroid) {
-      // Android físico y emulador:
-      //
-      // Por defecto usamos la IP de la PC para que también
-      // funcione en el teléfono físico.
-      //
-      // Para el emulador también podemos ejecutar con:
-      //
-      // flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
-      //
       return physicalDeviceBaseUrl;
     }
 
@@ -128,6 +116,14 @@ class ApiService {
 
   static Map<String, String> _authorizationHeaders(String token) {
     return {'Authorization': 'Bearer $token'};
+  }
+
+  static Map<String, String> _jsonAuthorizationHeaders(String token) {
+    return {
+      ..._authorizationHeaders(token),
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
   }
 
   // =========================================================
@@ -177,6 +173,7 @@ class ApiService {
         .timeout(const Duration(seconds: 10));
 
     print('LOGIN STATUS: ${response.statusCode}');
+
     print('LOGIN BODY: ${response.body}');
 
     return _decode(response);
@@ -266,21 +263,80 @@ class ApiService {
   // RESERVAS
   // =========================================================
 
-  static Future<List<Reservation>> getReservations(String token) async {
+  /// Obtiene las reservas.
+  ///
+  /// Los parámetros son opcionales.
+  ///
+  /// estado:
+  /// PENDIENTE
+  /// CONFIRMADA
+  /// CANCELADA
+  ///
+  /// El backend se encarga de aplicar los permisos:
+  /// ADMIN -> puede consultar reservas de todos.
+  /// CLIENTE -> solamente sus propias reservas.
+  static Future<List<Reservation>> getReservations(
+    String token, {
+    String? cliente,
+    int? mesa,
+    DateTime? fecha,
+    String? estado,
+    String order = 'asc',
+    int page = 1,
+    int limit = 100,
+  }) async {
+    final queryParameters = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+      'order': order,
+    };
+
+    if (cliente != null && cliente.trim().isNotEmpty) {
+      queryParameters['cliente'] = cliente.trim();
+    }
+
+    if (mesa != null) {
+      queryParameters['mesa'] = mesa.toString();
+    }
+
+    if (fecha != null) {
+      queryParameters['fecha'] = fecha.toUtc().toIso8601String();
+    }
+
+    if (estado != null &&
+        estado.trim().isNotEmpty &&
+        estado.toUpperCase() != 'TODAS') {
+      queryParameters['estado'] = estado.toUpperCase();
+    }
+
+    final uri = Uri.parse(
+      '$baseUrl/api/reservas',
+    ).replace(queryParameters: queryParameters);
+
     final response = await http
-        .get(
-          Uri.parse('$baseUrl/api/reservas'),
-          headers: _authorizationHeaders(token),
-        )
+        .get(uri, headers: _authorizationHeaders(token))
         .timeout(const Duration(seconds: 10));
 
     final body = _decode(response);
 
-    return (body['data'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(Reservation.fromJson)
+    final rawData = body['data'];
+
+    if (rawData is! List) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió una lista de reservas.',
+      );
+    }
+
+    return rawData
+        .whereType<Map>()
+        .map((item) => Reservation.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
+
+  // =========================================================
+  // OBTENER UNA RESERVA
+  // =========================================================
 
   static Future<Reservation> getReservation(String token, int id) async {
     final response = await http
@@ -292,8 +348,21 @@ class ApiService {
 
     final body = _decode(response);
 
-    return Reservation.fromJson(body['data'] as Map<String, dynamic>);
+    final rawData = body['data'];
+
+    if (rawData is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la reserva.',
+      );
+    }
+
+    return Reservation.fromJson(Map<String, dynamic>.from(rawData));
   }
+
+  // =========================================================
+  // CREAR RESERVA
+  // =========================================================
 
   static Future<Reservation> createReservation({
     required String token,
@@ -305,11 +374,7 @@ class ApiService {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/reservas'),
-          headers: {
-            ..._authorizationHeaders(token),
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: _jsonAuthorizationHeaders(token),
           body: jsonEncode({
             'fecha': date.toUtc().toIso8601String(),
             'personas': people,
@@ -333,6 +398,10 @@ class ApiService {
     return Reservation.fromJson(Map<String, dynamic>.from(rawData));
   }
 
+  // =========================================================
+  // ACTUALIZAR RESERVA
+  // =========================================================
+
   static Future<Reservation> updateReservation({
     required String token,
     required int id,
@@ -344,10 +413,7 @@ class ApiService {
     final response = await http
         .put(
           Uri.parse('$baseUrl/api/reservas/$id'),
-          headers: {
-            ..._authorizationHeaders(token),
-            'Content-Type': 'application/json',
-          },
+          headers: _jsonAuthorizationHeaders(token),
           body: jsonEncode({
             'fecha': date.toUtc().toIso8601String(),
             'personas': people,
@@ -359,28 +425,79 @@ class ApiService {
 
     final body = _decode(response);
 
-    return Reservation.fromJson(body['data'] as Map<String, dynamic>);
+    final rawData = body['data'];
+
+    if (rawData is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la reserva actualizada.',
+      );
+    }
+
+    return Reservation.fromJson(Map<String, dynamic>.from(rawData));
   }
+
+  // =========================================================
+  // CAMBIAR ESTADO DE RESERVA
+  // =========================================================
 
   static Future<Reservation> updateReservationStatus({
     required String token,
     required int id,
     required String status,
   }) async {
+    final normalizedStatus = status.trim().toUpperCase();
+
+    const validStatuses = {'PENDIENTE', 'CONFIRMADA', 'CANCELADA'};
+
+    if (!validStatuses.contains(normalizedStatus)) {
+      throw const ApiException(422, 'Estado de reserva inválido.');
+    }
+
     final response = await http
         .put(
           Uri.parse('$baseUrl/api/reservas/$id'),
-          headers: {
-            ..._authorizationHeaders(token),
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({'estado': status}),
+          headers: _jsonAuthorizationHeaders(token),
+          body: jsonEncode({'estado': normalizedStatus}),
         )
         .timeout(const Duration(seconds: 10));
 
     final body = _decode(response);
 
-    return Reservation.fromJson(body['data'] as Map<String, dynamic>);
+    final rawData = body['data'];
+
+    if (rawData is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la reserva actualizada.',
+      );
+    }
+
+    return Reservation.fromJson(Map<String, dynamic>.from(rawData));
+  }
+
+  // =========================================================
+  // ELIMINAR RESERVA
+  // =========================================================
+
+  /// Elimina una reserva mediante:
+  ///
+  /// DELETE /api/reservas/:id
+  ///
+  /// El backend debe verificar que solamente
+  /// el ADMIN pueda utilizar esta operación.
+  static Future<void> deleteReservation({
+    required String token,
+    required int id,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse('$baseUrl/api/reservas/$id'),
+          headers: _authorizationHeaders(token),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _decode(response);
   }
 
   // =========================================================
@@ -455,6 +572,10 @@ class ApiService {
         .toList();
   }
 
+  // =========================================================
+  // CREAR MESA
+  // =========================================================
+
   static Future<Map<String, dynamic>> createTable({
     required String token,
     required String numero,
@@ -473,10 +594,7 @@ class ApiService {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/mesas'),
-          headers: {
-            ..._authorizationHeaders(token),
-            'Content-Type': 'application/json',
-          },
+          headers: _jsonAuthorizationHeaders(token),
           body: jsonEncode({
             'numero': nombreMesa,
             'capacidad': capacidad,
@@ -487,8 +605,21 @@ class ApiService {
 
     final body = _decode(response);
 
-    return body['mesa'] as Map<String, dynamic>;
+    final mesa = body['mesa'];
+
+    if (mesa is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la mesa creada.',
+      );
+    }
+
+    return Map<String, dynamic>.from(mesa);
   }
+
+  // =========================================================
+  // ACTUALIZAR MESA
+  // =========================================================
 
   static Future<Map<String, dynamic>> updateTable({
     required String token,
@@ -509,10 +640,7 @@ class ApiService {
     final response = await http
         .put(
           Uri.parse('$baseUrl/api/mesas/$id'),
-          headers: {
-            ..._authorizationHeaders(token),
-            'Content-Type': 'application/json',
-          },
+          headers: _jsonAuthorizationHeaders(token),
           body: jsonEncode({
             'numero': nombreMesa,
             'capacidad': capacidad,
@@ -523,8 +651,21 @@ class ApiService {
 
     final body = _decode(response);
 
-    return body['mesa'] as Map<String, dynamic>;
+    final mesa = body['mesa'];
+
+    if (mesa is! Map) {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió los datos de la mesa actualizada.',
+      );
+    }
+
+    return Map<String, dynamic>.from(mesa);
   }
+
+  // =========================================================
+  // ELIMINAR MESA
+  // =========================================================
 
   static Future<void> deleteTable({
     required String token,

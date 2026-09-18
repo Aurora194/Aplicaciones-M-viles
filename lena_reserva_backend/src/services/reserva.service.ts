@@ -4,10 +4,13 @@ import {
   Rol,
 } from "@prisma/client";
 
-const prisma =
-  new PrismaClient();
+const prisma = new PrismaClient();
 
 export class ReservaService {
+  /* ============================================================
+     LISTAR RESERVAS
+     ============================================================ */
+
   async getReservas(
     page: number,
     limit: number,
@@ -21,124 +24,164 @@ export class ReservaService {
       rol: Rol;
     }
   ) {
-    const safePage =
-      Math.max(1, page);
+    const safePage = Math.max(1, page);
 
-    const safeLimit =
-      Math.max(
-        1,
-        Math.min(limit, 100)
-      );
+    const safeLimit = Math.max(
+      1,
+      Math.min(limit, 100)
+    );
 
-    const skip =
-      (safePage - 1) *
-      safeLimit;
+    const skip = (safePage - 1) * safeLimit;
 
+    /*
+     * IMPORTANTE:
+     *
+     * deletedAt: null hace que las reservas
+     * eliminadas no vuelvan a aparecer.
+     */
     const where: any = {
       deletedAt: null,
     };
 
-    if (
-      actor?.rol !== Rol.ADMIN
-    ) {
-      where.usuarioId =
-        actor?.id;
+    /*
+     * Los clientes solamente pueden
+     * consultar sus propias reservas.
+     *
+     * El administrador puede consultar
+     * todas las reservas.
+     */
+    if (actor?.rol !== Rol.ADMIN) {
+      where.usuarioId = actor?.id;
     }
 
-    if (cliente) {
+    /* FILTRO POR CLIENTE */
+    if (cliente && cliente.trim().length > 0) {
       where.usuario = {
         OR: [
           {
             nombre: {
-              contains: cliente,
+              contains: cliente.trim(),
             },
           },
           {
             apellido: {
-              contains: cliente,
+              contains: cliente.trim(),
             },
           },
           {
             correo: {
-              contains: cliente,
+              contains: cliente.trim(),
             },
           },
         ],
       };
     }
 
+    /* FILTRO POR MESA */
     if (mesa) {
       where.mesaId = mesa;
     }
 
+    /* FILTRO POR FECHA */
     if (fecha) {
-      const inicio =
-        new Date(fecha);
+      const inicio = new Date(fecha);
 
-      const fin =
-        new Date(fecha);
+      if (!Number.isNaN(inicio.getTime())) {
+        const fin = new Date(inicio);
 
-      fin.setDate(
-        fin.getDate() + 1
-      );
+        fin.setDate(fin.getDate() + 1);
 
-      where.fecha = {
-        gte: inicio,
-        lt: fin,
-      };
+        where.fecha = {
+          gte: inicio,
+          lt: fin,
+        };
+      }
     }
 
+    /* FILTRO POR ESTADO */
     if (estado) {
       where.estado = estado;
     }
 
-    const total =
-      await prisma.reserva.count({
-        where,
-      });
+    /*
+     * Contamos solamente las reservas
+     * activas.
+     */
+    const total = await prisma.reserva.count({
+      where,
+    });
 
-    const reservas =
-      await prisma.reserva.findMany({
-        where,
-        include: {
-          usuario: {
-            select: {
-              id: true,
-              nombre: true,
-              apellido: true,
-              correo: true,
-            },
-          },
-          mesa: {
-            select: {
-              id: true,
-              numero: true,
-              capacidad: true,
-            },
+    /*
+     * IMPORTANTE:
+     *
+     * Ordenamos primero por fecha.
+     * Como segundo criterio usamos ID
+     * para que dos reservas con la misma
+     * fecha/hora mantengan un orden estable.
+     */
+    const reservas = await prisma.reserva.findMany({
+      where,
+
+      include: {
+        usuario: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            correo: true,
           },
         },
-        skip,
-        take: safeLimit,
-        orderBy: {
+
+        mesa: {
+          select: {
+            id: true,
+            numero: true,
+            capacidad: true,
+          },
+        },
+      },
+
+      skip,
+      take: safeLimit,
+
+      orderBy: [
+        {
           fecha: order,
         },
-      });
+        {
+          id: order,
+        },
+      ],
+    });
 
     return {
       success: true,
       message: "Lista de reservas",
+
       data: reservas,
+
       pagination: {
         page: safePage,
         limit: safeLimit,
         total,
-        totalPages:
-          Math.ceil(
-            total / safeLimit
-          ),
+
+        totalPages: Math.ceil(
+          total / safeLimit
+        ),
+
+        hasNextPage:
+          safePage <
+          Math.ceil(total / safeLimit),
+
+        hasPreviousPage:
+          safePage > 1,
       },
     };
   }
+
+  /* ============================================================
+     OBTENER UNA RESERVA
+     ============================================================ */
 
   async getOne(
     id: number,
@@ -151,14 +194,20 @@ export class ReservaService {
       await prisma.reserva.findFirst({
         where: {
           id,
+
+          /*
+           * Una reserva eliminada
+           * ya no puede consultarse.
+           */
           deletedAt: null,
+
           ...(actor?.rol === Rol.ADMIN
             ? {}
             : {
-                usuarioId:
-                  actor?.id,
+                usuarioId: actor?.id,
               }),
         },
+
         include: {
           usuario: true,
           mesa: true,
@@ -177,6 +226,10 @@ export class ReservaService {
     };
   }
 
+  /* ============================================================
+     CREAR RESERVA
+     ============================================================ */
+
   async create(
     data: any,
     actor?: {
@@ -189,24 +242,17 @@ export class ReservaService {
         ? actor.id
         : Number(data.usuarioId);
 
-    const fecha =
-      new Date(data.fecha);
+    const fecha = new Date(data.fecha);
 
-    const mesaId =
-      Number(data.mesaId);
+    const mesaId = Number(data.mesaId);
 
-    const personas =
-      Number(data.personas);
+    const personas = Number(data.personas);
 
     if (
       !usuarioId ||
-      Number.isNaN(
-        fecha.getTime()
-      ) ||
+      Number.isNaN(fecha.getTime()) ||
       !mesaId ||
-      !Number.isInteger(
-        personas
-      ) ||
+      !Number.isInteger(personas) ||
       personas < 1
     ) {
       throw new Error(
@@ -215,13 +261,11 @@ export class ReservaService {
     }
 
     const usuario =
-      await prisma.usuario.findUnique(
-        {
-          where: {
-            id: usuarioId,
-          },
-        }
-      );
+      await prisma.usuario.findUnique({
+        where: {
+          id: usuarioId,
+        },
+      });
 
     if (!usuario) {
       throw new Error(
@@ -230,13 +274,11 @@ export class ReservaService {
     }
 
     const mesa =
-      await prisma.mesa.findUnique(
-        {
-          where: {
-            id: mesaId,
-          },
-        }
-      );
+      await prisma.mesa.findUnique({
+        where: {
+          id: mesaId,
+        },
+      });
 
     if (!mesa) {
       throw new Error(
@@ -244,9 +286,7 @@ export class ReservaService {
       );
     }
 
-    if (
-      mesa.deletedAt != null
-    ) {
+    if (mesa.deletedAt != null) {
       throw new Error(
         "La mesa no está disponible"
       );
@@ -258,33 +298,37 @@ export class ReservaService {
       );
     }
 
-    if (
-      personas > mesa.capacidad
-    ) {
+    if (personas > mesa.capacidad) {
       throw new Error(
         "La cantidad de personas excede la capacidad de la mesa"
       );
     }
 
+    /*
+     * Verificamos que no exista otra
+     * reserva activa para la misma mesa,
+     * fecha y hora.
+     */
     const reserva =
       await prisma.$transaction(
         async (tx) => {
           const existente =
-            await tx.reserva.findFirst(
-              {
-                where: {
-                  mesaId,
-                  fecha,
-                  estado: {
-                    in: [
-                      EstadoReserva.PENDIENTE,
-                      EstadoReserva.CONFIRMADA,
-                    ],
-                  },
-                  deletedAt: null,
+            await tx.reserva.findFirst({
+              where: {
+                mesaId,
+
+                fecha,
+
+                estado: {
+                  in: [
+                    EstadoReserva.PENDIENTE,
+                    EstadoReserva.CONFIRMADA,
+                  ],
                 },
-              }
-            );
+
+                deletedAt: null,
+              },
+            });
 
           if (existente) {
             throw new Error(
@@ -296,11 +340,14 @@ export class ReservaService {
             data: {
               fecha,
               personas,
+
               estado:
                 EstadoReserva.PENDIENTE,
+
               usuarioId,
               mesaId,
             },
+
             include: {
               usuario: true,
               mesa: true,
@@ -309,9 +356,13 @@ export class ReservaService {
         }
       );
 
+    /*
+     * Notificación.
+     */
     await prisma.notificacion.create({
       data: {
         usuarioId,
+
         mensaje:
           `Reserva #${reserva.id} creada y pendiente de confirmación.`,
       },
@@ -319,11 +370,17 @@ export class ReservaService {
 
     return {
       success: true,
+
       message:
         "Reserva creada correctamente",
+
       data: reserva,
     };
   }
+
+  /* ============================================================
+     ACTUALIZAR RESERVA
+     ============================================================ */
 
   async update(
     id: number,
@@ -337,7 +394,9 @@ export class ReservaService {
       await prisma.reserva.findFirst({
         where: {
           id,
+
           deletedAt: null,
+
           ...(actor?.rol === Rol.ADMIN
             ? {}
             : {
@@ -427,9 +486,7 @@ export class ReservaService {
       );
     }
 
-    if (
-      mesa.deletedAt != null
-    ) {
+    if (mesa.deletedAt != null) {
       throw new Error(
         "La mesa no está disponible"
       );
@@ -445,37 +502,40 @@ export class ReservaService {
       );
     }
 
-    if (
-      personas > mesa.capacidad
-    ) {
+    if (personas > mesa.capacidad) {
       throw new Error(
         "La cantidad de personas excede la capacidad de la mesa"
       );
     }
 
+    /*
+     * Verificar conflicto.
+     */
     if (
       estado !==
-        EstadoReserva.CANCELADA
+      EstadoReserva.CANCELADA
     ) {
       const conflicto =
-        await prisma.reserva.findFirst(
-          {
-            where: {
-              id: {
-                not: id,
-              },
-              mesaId,
-              fecha,
-              estado: {
-                in: [
-                  EstadoReserva.PENDIENTE,
-                  EstadoReserva.CONFIRMADA,
-                ],
-              },
-              deletedAt: null,
+        await prisma.reserva.findFirst({
+          where: {
+            id: {
+              not: id,
             },
-          }
-        );
+
+            mesaId,
+
+            fecha,
+
+            estado: {
+              in: [
+                EstadoReserva.PENDIENTE,
+                EstadoReserva.CONFIRMADA,
+              ],
+            },
+
+            deletedAt: null,
+          },
+        });
 
       if (conflicto) {
         throw new Error(
@@ -485,31 +545,36 @@ export class ReservaService {
     }
 
     const reserva =
-      await prisma.reserva.update(
-        {
-          where: {
-            id,
-          },
-          data: {
-            fecha,
-            personas,
-            mesaId,
-            usuarioId:
-              actor?.rol === Rol.CLIENTE
-                ? actor.id
-                : (
-                    data.usuarioId ??
-                    existe.usuarioId
-                  ),
-            estado,
-          },
-          include: {
-            usuario: true,
-            mesa: true,
-          },
-        }
-      );
+      await prisma.reserva.update({
+        where: {
+          id,
+        },
 
+        data: {
+          fecha,
+          personas,
+          mesaId,
+
+          usuarioId:
+            actor?.rol === Rol.CLIENTE
+              ? actor.id
+              : (
+                  data.usuarioId ??
+                  existe.usuarioId
+                ),
+
+          estado,
+        },
+
+        include: {
+          usuario: true,
+          mesa: true,
+        },
+      });
+
+    /*
+     * Notificación cuando cambia el estado.
+     */
     if (
       estado !==
       existe.estado
@@ -518,6 +583,7 @@ export class ReservaService {
         data: {
           usuarioId:
             reserva.usuarioId,
+
           mensaje:
             `La reserva #${reserva.id} cambió a estado ${estado}.`,
         },
@@ -532,6 +598,10 @@ export class ReservaService {
     };
   }
 
+  /* ============================================================
+     ELIMINAR RESERVA
+     ============================================================ */
+
   async remove(
     id: number,
     actor?: {
@@ -539,17 +609,24 @@ export class ReservaService {
       rol: Rol;
     }
   ) {
+    /*
+     * Solamente ADMIN puede eliminar.
+     */
+    if (actor?.rol !== Rol.ADMIN) {
+      throw new Error(
+        "Solo un administrador puede eliminar reservas"
+      );
+    }
+
+    /*
+     * Buscar solamente reservas
+     * que todavía no estén eliminadas.
+     */
     const reserva =
       await prisma.reserva.findFirst({
         where: {
           id,
           deletedAt: null,
-          ...(actor?.rol === Rol.ADMIN
-            ? {}
-            : {
-                usuarioId:
-                  actor?.id,
-              }),
         },
       });
 
@@ -559,24 +636,37 @@ export class ReservaService {
       );
     }
 
-    const reservaCancelada =
-      await prisma.reserva.update(
-        {
-          where: {
-            id,
-          },
-          data: {
-            estado:
-              EstadoReserva.CANCELADA,
-          },
-        }
-      );
+    /*
+     * BORRADO LÓGICO.
+     *
+     * No borramos físicamente el registro.
+     * Simplemente colocamos la fecha
+     * de eliminación.
+     */
+    const reservaEliminada =
+      await prisma.reserva.update({
+        where: {
+          id,
+        },
+
+        data: {
+          deletedAt: new Date(),
+        },
+
+        include: {
+          usuario: true,
+          mesa: true,
+        },
+      });
 
     return {
       success: true,
+
       message:
-        "Reserva cancelada correctamente",
-      data: reservaCancelada,
+        "Reserva eliminada correctamente",
+
+      data: reservaEliminada,
     };
   }
 }
+
