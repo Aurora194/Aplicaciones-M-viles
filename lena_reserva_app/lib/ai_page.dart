@@ -159,19 +159,6 @@ class _AIPageState extends State<AIPage> {
     );
   }
 
-  DateTime _ecuadorToUtc(DateTime value) {
-    return DateTime.utc(
-      value.year,
-      value.month,
-      value.day,
-      value.hour + 5,
-      value.minute,
-      value.second,
-      value.millisecond,
-      value.microsecond,
-    );
-  }
-
   // ============================================================
   // FECHAS Y HORAS
   // ============================================================
@@ -205,6 +192,31 @@ class _AIPageState extends State<AIPage> {
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
+  }
+
+  String _formatDateContext(DateTime date) {
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final selected = DateTime(date.year, date.month, date.day);
+
+    if (selected == today) {
+      return 'Hoy · ${_formatDate(date)}';
+    }
+
+    if (selected == tomorrow) {
+      return 'Mañana · ${_formatDate(date)}';
+    }
+
+    return _formatDate(date);
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
   }
 
   // ============================================================
@@ -349,7 +361,9 @@ class _AIPageState extends State<AIPage> {
       final draft = result.reservationDraft;
 
       final peopleValue = _mapValue(draft, 'people');
+
       final dateValue = _mapValue(draft, 'date');
+
       final timeValue = _mapValue(draft, 'time');
 
       final people = _parsePeople(peopleValue);
@@ -361,7 +375,7 @@ class _AIPageState extends State<AIPage> {
       }
 
       // ========================================================
-      // AGREGAR RESPUESTA DEL ASISTENTE
+      // RESPUESTA DEL ASISTENTE
       // ========================================================
 
       setState(() {
@@ -382,15 +396,14 @@ class _AIPageState extends State<AIPage> {
 
       // ========================================================
       // RESERVA DETECTADA
+      //
+      // IMPORTANTE:
+      // NO seleccionamos ninguna mesa.
+      // Solo mostramos el botón para ir a Nueva reserva.
       // ========================================================
 
       if (people != null && date != null && time != null) {
-        await _showReservationOptions(
-          people: people,
-          date: date,
-          time: time,
-          mesas: mesas,
-        );
+        await _showReservationOptions(people: people, date: date, time: time);
       }
     } on ApiException catch (exception) {
       if (!mounted) {
@@ -707,67 +720,54 @@ class _AIPageState extends State<AIPage> {
 
   // ============================================================
   // OPCIONES DE RESERVA
+  //
+  // Ya NO selecciona mesa.
+  // Solo muestra los datos detectados y permite
+  // enviarlos a Nueva reserva.
   // ============================================================
 
   Future<void> _showReservationOptions({
     required int people,
     required DateTime date,
     required TimeOfDay time,
-    required List<dynamic> mesas,
   }) async {
     if (!mounted) {
       return;
     }
 
-    if (mesas.isEmpty) {
-      return;
-    }
-
-    final selectedTable = await showModalBottomSheet<dynamic>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return _TableSelectionSheet(
-          mesas: mesas,
+        return _ReservationDraftSheet(
           people: people,
           date: date,
           time: time,
+          onSelectTable: () async {
+            Navigator.pop(sheetContext);
+
+            await _openNewReservation(people: people, date: date, time: time);
+          },
         );
       },
     );
+  }
 
-    if (!mounted || selectedTable == null) {
-      return;
-    }
+  // ============================================================
+  // IR A NUEVA RESERVA
+  // ============================================================
 
-    int? tableId;
-
-    if (selectedTable is Map) {
-      final rawId = selectedTable['id'];
-
-      if (rawId is int) {
-        tableId = rawId;
-      } else if (rawId is num) {
-        tableId = rawId.toInt();
-      } else {
-        tableId = int.tryParse(rawId?.toString() ?? '');
-      }
-    }
-
-    if (tableId == null) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No fue posible identificar la mesa seleccionada.'),
-        ),
-      );
-
-      return;
-    }
+  Future<void> _openNewReservation({
+    required int people,
+    required DateTime date,
+    required TimeOfDay time,
+  }) async {
+    // ==========================================================
+    // IMPORTANTE:
+    // La mesa SIEMPRE queda en null.
+    // Nueva reserva será la encargada de seleccionarla.
+    // ==========================================================
 
     CreateReservationPage.draftPeople = people.toString();
 
@@ -778,17 +778,17 @@ class _AIPageState extends State<AIPage> {
       minute: time.minute,
     );
 
-    CreateReservationPage.draftTableId = tableId;
+    CreateReservationPage.draftTableId = null;
 
     if (!mounted) {
       return;
     }
 
-    try {
-      await Navigator.pushNamed(context, '/app/reservas/nueva');
-    } finally {
-      CreateReservationPage.draftTableId = null;
-    }
+    await Navigator.pushNamed(context, '/app/reservas/nueva');
+
+    // Al regresar dejamos explícitamente
+    // la mesa sin selección.
+    CreateReservationPage.draftTableId = null;
   }
 
   // ============================================================
@@ -1101,15 +1101,177 @@ class _AIPageState extends State<AIPage> {
                 ],
               ),
             ),
-          if (!isUser && message.mesas != null && message.mesas!.isNotEmpty)
-            _buildAvailableTables(
-              message.mesas!,
-              people: message.people,
-              date: message.date,
-              time: message.timeOfDay,
+          if (!isUser &&
+              message.people != null &&
+              message.date != null &&
+              message.timeOfDay != null)
+            _buildReservationDetectedCard(
+              people: message.people!,
+              date: message.date!,
+              time: message.timeOfDay!,
             ),
         ],
       ),
+    );
+  }
+
+  // ============================================================
+  // TARJETA DE RESERVA DETECTADA
+  // ============================================================
+
+  Widget _buildReservationDetectedCard({
+    required int people,
+    required DateTime date,
+    required TimeOfDay time,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(left: 46, top: 10),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE1E7)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8E7EA),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(
+                  Icons.event_note_rounded,
+                  color: _primaryColor,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Datos de la reserva',
+                  style: TextStyle(
+                    color: _textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F9FB),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Column(
+              children: [
+                _buildReservationInfoRow(
+                  icon: Icons.people_alt_outlined,
+                  label: 'Personas',
+                  value: '$people',
+                ),
+                const SizedBox(height: 8),
+                _buildReservationInfoRow(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Fecha',
+                  value: _formatDateContext(date),
+                ),
+                const SizedBox(height: 8),
+                _buildReservationInfoRow(
+                  icon: Icons.access_time_rounded,
+                  label: 'Hora',
+                  value: _formatTimeOfDay(time),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'La mesa se seleccionará en la pantalla de nueva reserva.',
+            style: TextStyle(
+              color: _secondaryTextColor,
+              fontSize: 11.5,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 11),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                _openNewReservation(people: people, date: date, time: time);
+              },
+              icon: const Icon(Icons.table_restaurant_rounded, size: 19),
+              label: const Text('Seleccionar mesa'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReservationInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: _secondaryTextColor),
+        const SizedBox(width: 7),
+        SizedBox(
+          width: 65,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: _secondaryTextColor,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: _textColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1170,304 +1332,6 @@ class _AIPageState extends State<AIPage> {
         shape: BoxShape.circle,
       ),
     );
-  }
-
-  // ============================================================
-  // MESAS DISPONIBLES
-  // ============================================================
-
-  Widget _buildAvailableTables(
-    List<dynamic> mesas, {
-    int? people,
-    DateTime? date,
-    TimeOfDay? time,
-  }) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(left: 46, top: 9),
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDDE1E7)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8E7EA),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.event_seat_rounded,
-                  size: 20,
-                  color: _primaryColor,
-                ),
-              ),
-              const SizedBox(width: 9),
-              const Expanded(
-                child: Text(
-                  'Mesas disponibles',
-                  style: TextStyle(
-                    color: _textColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8E7EA),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${mesas.length}',
-                  style: const TextStyle(
-                    color: _primaryColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (people != null && date != null && time != null) ...[
-            const SizedBox(height: 9),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8F9FB),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today_rounded,
-                    size: 15,
-                    color: _secondaryTextColor,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      '$people personas • '
-                      '${_formatDate(date)} • '
-                      '${time.hour.toString().padLeft(2, '0')}:'
-                      '${time.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        color: _secondaryTextColor,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 10),
-          ...mesas.map(
-            (mesa) =>
-                _buildTableItem(mesa, people: people, date: date, time: time),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // MESA
-  // ============================================================
-
-  Widget _buildTableItem(
-    dynamic mesa, {
-    int? people,
-    DateTime? date,
-    TimeOfDay? time,
-  }) {
-    String numero = '';
-    String capacidad = '';
-
-    if (mesa is Map) {
-      numero = mesa['numero']?.toString() ?? '';
-      capacidad = mesa['capacidad']?.toString() ?? '';
-    }
-
-    final hasReservationData = people != null && date != null && time != null;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD7AEB6)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: hasReservationData
-              ? () => _selectTableFromCard(
-                  mesa,
-                  people: people,
-                  date: date,
-                  time: time,
-                )
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8E7EA),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.table_restaurant_rounded,
-                    color: _primaryColor,
-                    size: 21,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Mesa $numero',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _textColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '$capacidad personas',
-                        style: const TextStyle(
-                          color: _secondaryTextColor,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (hasReservationData) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _primaryColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Elegir',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // SELECCIONAR MESA DESDE TARJETA
-  // ============================================================
-
-  Future<void> _selectTableFromCard(
-    dynamic mesa, {
-    required int people,
-    required DateTime date,
-    required TimeOfDay time,
-  }) async {
-    int? tableId;
-
-    if (mesa is Map) {
-      final rawId = mesa['id'];
-
-      if (rawId is int) {
-        tableId = rawId;
-      } else if (rawId is num) {
-        tableId = rawId.toInt();
-      } else {
-        tableId = int.tryParse(rawId?.toString() ?? '');
-      }
-    }
-
-    if (tableId == null) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No fue posible identificar la mesa.')),
-      );
-
-      return;
-    }
-
-    CreateReservationPage.draftPeople = people.toString();
-
-    CreateReservationPage.draftDate = DateTime(date.year, date.month, date.day);
-
-    CreateReservationPage.draftTime = TimeOfDay(
-      hour: time.hour,
-      minute: time.minute,
-    );
-
-    CreateReservationPage.draftTableId = tableId;
-
-    if (!mounted) {
-      return;
-    }
-
-    try {
-      await Navigator.pushNamed(context, '/app/reservas/nueva');
-    } finally {
-      CreateReservationPage.draftTableId = null;
-    }
   }
 
   // ============================================================
@@ -1554,49 +1418,72 @@ class _AIPageState extends State<AIPage> {
 }
 
 // ==================================================================
-// COLORES DEL SELECTOR DE MESAS
+// COLORES DEL PANEL DE RESERVA
 // ==================================================================
 
-const Color _aiPrimaryColor = Color(0xFF94152A);
-const Color _aiTextColor = Color(0xFF172033);
-const Color _aiSecondaryTextColor = Color(0xFF68778D);
+const Color _draftPrimaryColor = Color(0xFF94152A);
+
+const Color _draftTextColor = Color(0xFF172033);
+
+const Color _draftSecondaryTextColor = Color(0xFF68778D);
 
 // ==================================================================
-// HOJA PARA SELECCIONAR MESA
+// PANEL DE DATOS DE RESERVA
 // ==================================================================
 
-class _TableSelectionSheet extends StatelessWidget {
-  const _TableSelectionSheet({
-    required this.mesas,
+class _ReservationDraftSheet extends StatelessWidget {
+  const _ReservationDraftSheet({
     required this.people,
     required this.date,
     required this.time,
+    required this.onSelectTable,
   });
 
-  final List<dynamic> mesas;
   final int people;
   final DateTime date;
   final TimeOfDay time;
+  final VoidCallback onSelectTable;
+
+  String _formatDate(DateTime value) {
+    return '${value.day.toString().padLeft(2, '0')}/'
+        '${value.month.toString().padLeft(2, '0')}/'
+        '${value.year}';
+  }
+
+  String _formatTime(TimeOfDay value) {
+    return '${value.hour.toString().padLeft(2, '0')}:'
+        '${value.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateContext(DateTime value) {
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final selected = DateTime(value.year, value.month, value.day);
+
+    if (selected == today) {
+      return 'Hoy · ${_formatDate(value)}';
+    }
+
+    if (selected == tomorrow) {
+      return 'Mañana · ${_formatDate(value)}';
+    }
+
+    return _formatDate(value);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final dateText =
-        '${date.day.toString().padLeft(2, '0')}/'
-        '${date.month.toString().padLeft(2, '0')}/'
-        '${date.year}';
-
-    final timeText =
-        '${time.hour.toString().padLeft(2, '0')}:'
-        '${time.minute.toString().padLeft(2, '0')}';
-
     return SafeArea(
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 650),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1615,24 +1502,24 @@ class _TableSelectionSheet extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 42,
-                  height: 42,
+                  width: 43,
+                  height: 43,
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8E7EA),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
-                    Icons.table_restaurant_rounded,
-                    color: _aiPrimaryColor,
+                    Icons.event_note_rounded,
+                    color: _draftPrimaryColor,
                   ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    'Selecciona una mesa',
+                    'Reserva detectada',
                     style: TextStyle(
-                      color: _aiTextColor,
-                      fontSize: 21,
+                      color: _draftTextColor,
+                      fontSize: 20,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -1640,129 +1527,76 @@ class _TableSelectionSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
+            const Text(
+              'Revisa los datos antes de seleccionar la mesa.',
+              style: TextStyle(
+                color: _draftSecondaryTextColor,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 14),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8F9FB),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E5EA)),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  const Icon(
-                    Icons.people_alt_outlined,
-                    size: 17,
-                    color: _aiSecondaryTextColor,
+                  _buildInfoRow(
+                    icon: Icons.people_alt_outlined,
+                    title: 'Personas',
+                    value: '$people personas',
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '$people personas • '
-                      '$dateText • '
-                      '$timeText',
-                      style: const TextStyle(
-                        color: _aiSecondaryTextColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  const SizedBox(height: 11),
+                  _buildInfoRow(
+                    icon: Icons.calendar_today_outlined,
+                    title: 'Fecha',
+                    value: _formatDateContext(date),
+                  ),
+                  const SizedBox(height: 11),
+                  _buildInfoRow(
+                    icon: Icons.access_time_rounded,
+                    title: 'Hora',
+                    value: _formatTime(time),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: mesas.length,
-                separatorBuilder: (_, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final mesa = mesas[index];
+            const SizedBox(height: 16),
 
-                  String numero = '';
-                  String capacidad = '';
-
-                  if (mesa is Map) {
-                    numero = mesa['numero']?.toString() ?? '';
-
-                    capacidad = mesa['capacidad']?.toString() ?? '';
-                  }
-
-                  return Material(
-                    color: const Color(0xFFFFFBFC),
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () {
-                        Navigator.pop(context, mesa);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(13),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFD7AEB6)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 45,
-                              height: 45,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8E7EA),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.table_restaurant_rounded,
-                                color: _aiPrimaryColor,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Mesa $numero',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: _aiTextColor,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    '$capacidad personas',
-                                    style: const TextStyle(
-                                      color: _aiSecondaryTextColor,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: _aiPrimaryColor,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: 17,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+            // ====================================================
+            // BOTÓN SOLICITADO
+            // ====================================================
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onSelectTable,
+                icon: const Icon(Icons.table_restaurant_rounded, size: 19),
+                label: const Text('Seleccionar mesa'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _draftPrimaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+
+            // ====================================================
+            // CANCELAR
+            // ====================================================
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -1770,11 +1604,15 @@ class _TableSelectionSheet extends StatelessWidget {
                   Navigator.pop(context);
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _aiPrimaryColor,
+                  foregroundColor: _draftPrimaryColor,
                   side: const BorderSide(color: Color(0xFFD7AEB6)),
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 child: const Text('Cancelar'),
@@ -1783,6 +1621,45 @@ class _TableSelectionSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 17, color: _draftPrimaryColor),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: _draftSecondaryTextColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: _draftTextColor,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -8,15 +8,14 @@ import 'auth/auth_scope.dart';
 
 enum ReservationLoadState { loading, empty, error, success }
 
-const Duration _ecuadorUtcOffset = Duration(hours: -5);
+// ============================================================
+// FECHA Y HORA DE ECUADOR
+// ============================================================
 
-/* ============================================================
-   FECHA Y HORA ECUADOR
-   ============================================================ */
+const Duration _ecuadorUtcOffset = Duration(hours: -5);
 
 DateTime ecuadorNow() {
   final utcNow = DateTime.now().toUtc();
-
   final ecuador = utcNow.add(_ecuadorUtcOffset);
 
   return DateTime(
@@ -52,7 +51,6 @@ DateTime ecuadorToUtc(DateTime ecuadorDateTime) {
 
 DateTime utcToEcuador(DateTime dateTime) {
   final utc = dateTime.toUtc();
-
   final ecuador = utc.add(_ecuadorUtcOffset);
 
   return DateTime(
@@ -71,9 +69,9 @@ DateTime buildEcuadorDateTime(DateTime date, TimeOfDay time) {
   return DateTime(date.year, date.month, date.day, time.hour, time.minute);
 }
 
-/* ============================================================
-   LISTA DE RESERVAS
-   ============================================================ */
+// ============================================================
+// LISTA DE RESERVAS
+// ============================================================
 
 class ReservationListPage extends StatefulWidget {
   const ReservationListPage({super.key});
@@ -85,23 +83,23 @@ class ReservationListPage extends StatefulWidget {
 class _ReservationListPageState extends State<ReservationListPage> {
   ReservationLoadState state = ReservationLoadState.loading;
 
-  List<Reservation> reservations = const [];
+  List<Reservation> reservations = [];
 
   String? errorMessage;
 
-  String selectedStatus = 'TODAS';
+  String selectedFilter = 'TODAS';
 
-  /* ==========================================================
-     PAGINACIÓN
-     ========================================================== */
-
-  static const int pageSize = 15;
+  // ============================================================
+  // PAGINACIÓN
+  // ============================================================
 
   int currentPage = 1;
 
+  final int pageSize = 15;
+
   bool hasNextPage = false;
 
-  bool hasPreviousPage = false;
+  bool changingPage = false;
 
   @override
   void initState() {
@@ -112,7 +110,7 @@ class _ReservationListPageState extends State<ReservationListPage> {
 
       final auth = AuthScope.of(context);
 
-      if (auth.accessToken == null || auth.accessToken!.isEmpty) {
+      if (!auth.isAuthenticated) {
         Navigator.pushReplacementNamed(context, '/login');
 
         return;
@@ -122,10 +120,6 @@ class _ReservationListPageState extends State<ReservationListPage> {
     });
   }
 
-  /* ==========================================================
-     CARGAR RESERVAS
-     ========================================================== */
-
   Future<void> _load({int? page}) async {
     if (!mounted) return;
 
@@ -133,799 +127,570 @@ class _ReservationListPageState extends State<ReservationListPage> {
 
     setState(() {
       state = ReservationLoadState.loading;
-
+      changingPage = true;
       errorMessage = null;
     });
 
     try {
       final auth = AuthScope.of(context);
-
       final token = auth.accessToken;
 
       if (token == null || token.isEmpty) {
         throw const ApiException(401, 'La sesión no está disponible.');
       }
 
-      /*
-       * Si hay filtro, lo mandamos al backend.
-       */
-      final String? estado = selectedStatus == 'TODAS' ? null : selectedStatus;
-
       final result = await ApiService.getReservations(
         token,
+        estado: selectedFilter,
+        order: 'asc',
         page: requestedPage,
         limit: pageSize,
-        order: 'asc',
-        estado: estado,
       );
 
       if (!mounted) return;
 
-      /*
-       * Como getReservations devuelve
-       * solamente la lista, determinamos
-       * si existe una página siguiente
-       * cuando recibimos exactamente 15.
-       */
-      final next = result.length == pageSize;
+      final ordered = List<Reservation>.from(result)
+        ..sort((a, b) => a.date.compareTo(b.date));
 
-      /*
-       * Si la página solicitada quedó
-       * vacía y no estamos en la primera,
-       * regresamos automáticamente a la
-       * página anterior.
-       */
-      if (result.isEmpty && requestedPage > 1) {
-        await _load(page: requestedPage - 1);
+      setState(() {
+        currentPage = requestedPage;
+        reservations = ordered;
+
+        // Si llegaron 15 registros, puede existir otra página.
+        // Si llegaron menos de 15, esta es la última página.
+        hasNextPage = ordered.length == pageSize;
+
+        state = ordered.isEmpty
+            ? ReservationLoadState.empty
+            : ReservationLoadState.success;
+
+        changingPage = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
+
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(context, '/login');
 
         return;
       }
 
       setState(() {
-        reservations = result;
-
-        currentPage = requestedPage;
-
-        hasNextPage = next;
-
-        hasPreviousPage = requestedPage > 1;
-
-        state = result.isEmpty
-            ? ReservationLoadState.empty
-            : ReservationLoadState.success;
-      });
-    } on ApiException catch (error) {
-      if (!mounted) return;
-
-      setState(() {
         state = ReservationLoadState.error;
-
         errorMessage = error.message;
+        changingPage = false;
       });
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
         state = ReservationLoadState.error;
-
         errorMessage = 'Error al cargar las reservas: $error';
+        changingPage = false;
       });
     }
   }
 
-  /* ==========================================================
-     PÁGINA ANTERIOR
-     ========================================================== */
+  Future<void> _changeFilter(String value) async {
+    if (value == selectedFilter) {
+      return;
+    }
+
+    setState(() {
+      selectedFilter = value;
+      currentPage = 1;
+      hasNextPage = false;
+    });
+
+    await _load(page: 1);
+  }
 
   Future<void> _previousPage() async {
-    if (!hasPreviousPage) {
+    if (currentPage <= 1 || changingPage) {
       return;
     }
 
     await _load(page: currentPage - 1);
   }
 
-  /* ==========================================================
-     PÁGINA SIGUIENTE
-     ========================================================== */
-
   Future<void> _nextPage() async {
-    if (!hasNextPage) {
+    if (!hasNextPage || changingPage) {
       return;
     }
 
     await _load(page: currentPage + 1);
   }
 
-  /* ==========================================================
-     FILTRO
-     ========================================================== */
-
-  Future<void> _showFilterDialog() async {
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Filtrar reservas'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _FilterOption(
-                title: 'Todas',
-                value: 'TODAS',
-                selected: selectedStatus == 'TODAS',
-                onTap: () {
-                  Navigator.pop(dialogContext, 'TODAS');
-                },
-              ),
-              _FilterOption(
-                title: 'Pendientes',
-                value: 'PENDIENTE',
-                selected: selectedStatus == 'PENDIENTE',
-                onTap: () {
-                  Navigator.pop(dialogContext, 'PENDIENTE');
-                },
-              ),
-              _FilterOption(
-                title: 'Confirmadas',
-                value: 'CONFIRMADA',
-                selected: selectedStatus == 'CONFIRMADA',
-                onTap: () {
-                  Navigator.pop(dialogContext, 'CONFIRMADA');
-                },
-              ),
-              _FilterOption(
-                title: 'Canceladas',
-                value: 'CANCELADA',
-                selected: selectedStatus == 'CANCELADA',
-                onTap: () {
-                  Navigator.pop(dialogContext, 'CANCELADA');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (!mounted || selected == null) {
-      return;
-    }
-
-    setState(() {
-      selectedStatus = selected;
-
-      currentPage = 1;
-    });
-
-    await _load(page: 1);
-  }
-
-  /* ==========================================================
-     NUEVA RESERVA
-     ========================================================== */
-
-  Future<void> _newReservation() async {
-    final result = await Navigator.pushNamed(context, '/app/reservas/nueva');
-
-    if (!mounted) return;
-
-    if (result == true) {
-      await _load(page: currentPage);
-    }
-  }
-
-  /* ==========================================================
-     GESTIONAR MESAS
-     ========================================================== */
-
-  Future<void> _manageTables() async {
-    await Navigator.pushNamed(context, '/app/mesas');
-
-    if (!mounted) return;
-
-    await _load(page: currentPage);
-  }
-
-  /* ==========================================================
-     ASISTENTE
-     ========================================================== */
-
-  Future<void> _openAssistant() async {
-    await Navigator.pushNamed(context, '/app/ai');
-
-    if (!mounted) return;
-
-    await _load(page: currentPage);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final auth = AuthScope.of(context);
-
-    final admin = auth.userRole == 'ADMIN';
+    final isAdmin = AuthScope.of(context).userRole == 'ADMIN';
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F7F6),
       appBar: AppBar(
-        title: Text(admin ? 'Gestionar reservas' : 'Mis reservas'),
+        title: const Text(
+          'Reservas',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
         actions: [
-          if (admin)
-            IconButton(
-              tooltip: 'Filtrar reservas',
-              onPressed: _showFilterDialog,
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.filter_list_outlined),
-                  if (selectedStatus != 'TODAS')
-                    Positioned(
-                      right: -2,
-                      top: -2,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
           IconButton(
             tooltip: 'Cerrar sesión',
-            onPressed: () {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              );
+            onPressed: () async {
+              await AuthScope.of(context).signOut();
+
+              if (!context.mounted) return;
+
+              Navigator.pushReplacementNamed(context, '/login');
             },
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-
-      body: RefreshIndicator(
-        onRefresh: () => _load(page: currentPage),
-        child: _buildBody(admin),
-      ),
-
-      /* ========================================================
-         ASISTENTE LEÑA
-         ======================================================== */
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAssistant,
+        onPressed: () {
+          Navigator.pushNamed(context, '/app/ai');
+        },
         icon: const Icon(Icons.auto_awesome),
         label: const Text('Asistente Leña'),
       ),
+      body: switch (state) {
+        ReservationLoadState.loading => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        ReservationLoadState.empty => _buildEmptyState(isAdmin),
+        ReservationLoadState.error => _ErrorView(
+          message: errorMessage ?? 'Error desconocido.',
+          onRetry: _load,
+        ),
+        ReservationLoadState.success => _buildSuccessState(isAdmin),
+      },
     );
   }
 
-  /* ==========================================================
-     CUERPO
-     ========================================================== */
-
-  Widget _buildBody(bool admin) {
-    if (state == ReservationLoadState.loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (state == ReservationLoadState.error) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+  Widget _buildEmptyState(bool isAdmin) {
+    return RefreshIndicator(
+      onRefresh: () => _load(page: currentPage),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 90),
         children: [
-          const SizedBox(height: 80),
-
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-
-          const SizedBox(height: 16),
-
-          const Text(
-            'No fue posible cargar las reservas',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 10),
-
-          Text(
-            errorMessage ?? 'Error desconocido',
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 24),
-
-          ElevatedButton.icon(
-            onPressed: () => _load(page: currentPage),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reintentar'),
-          ),
-        ],
-      );
-    }
-
-    if (state == ReservationLoadState.empty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: [
-          const SizedBox(height: 60),
-
-          Icon(
-            Icons.event_busy_outlined,
-            size: 72,
-            color: AppColors.primaryLight,
-          ),
-
-          const SizedBox(height: 20),
-
-          Text(
-            admin ? 'No existen reservas registradas' : 'No tienes reservas',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            admin
-                ? 'Las reservas de los clientes aparecerán aquí.'
-                : 'Puedes crear una nueva reserva desde la aplicación.',
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 24),
-
-          if (admin)
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _newReservation,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nueva reserva'),
-                  ),
-                ),
-
-                const SizedBox(width: 10),
-
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _manageTables,
-                    icon: const Icon(Icons.table_restaurant_outlined),
-                    label: const Text('Gestionar mesas'),
-                  ),
-                ),
-              ],
-            )
-          else
-            ElevatedButton.icon(
-              onPressed: _newReservation,
-              icon: const Icon(Icons.add),
-              label: const Text('Nueva reserva'),
-            ),
-        ],
-      );
-    }
-
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-
-      children: [
-        /* ======================================================
-           RESUMEN
-           ====================================================== */
-        _SummaryCard(
-          visible: reservations.length,
-          filter: selectedStatus,
-          isAdmin: admin,
-          page: currentPage,
-          pageSize: pageSize,
-        ),
-
-        const SizedBox(height: 14),
-
-        /* ======================================================
-           BOTONES
-           ====================================================== */
-        if (admin)
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _newReservation,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nueva reserva'),
+                child: _SummaryTile(
+                  label: 'Reservas',
+                  value: '0',
+                  color: AppColors.primary,
                 ),
               ),
-
-              const SizedBox(width: 10),
-
+              const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _manageTables,
-                  icon: const Icon(Icons.table_restaurant_outlined),
-                  label: const Text('Gestionar mesas'),
+                child: _SummaryTile(
+                  label: 'Confirmadas',
+                  value: '0',
+                  color: AppColors.success,
                 ),
               ),
             ],
           ),
-
-        if (admin) const SizedBox(height: 18),
-
-        /* ======================================================
-           RESERVAS
-           ====================================================== */
-        ...reservations.map((reservation) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-
-            child: ReservationCard(
-              reservation: reservation,
-              isAdmin: admin,
-              onChanged: () => _load(page: currentPage),
-            ),
-          );
-        }),
-
-        const SizedBox(height: 8),
-
-        /* ======================================================
-           PAGINACIÓN
-           ====================================================== */
-        _PaginationControls(
-          currentPage: currentPage,
-          hasPrevious: hasPreviousPage,
-          hasNext: hasNextPage,
-          onPrevious: _previousPage,
-          onNext: _nextPage,
-        ),
-      ],
-    );
-  }
-}
-
-/* ============================================================
-   FILTRO
-   ============================================================ */
-
-class _FilterOption extends StatelessWidget {
-  const _FilterOption({
-    required this.title,
-    required this.value,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String value;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-
-      leading: Radio<bool>(
-        value: true,
-        groupValue: selected ? true : null,
-        onChanged: (_) => onTap(),
-      ),
-
-      title: Text(title),
-
-      trailing: selected
-          ? const Icon(Icons.check, color: AppColors.primaryLight)
-          : null,
-
-      onTap: onTap,
-    );
-  }
-}
-
-/* ============================================================
-   RESUMEN
-   ============================================================ */
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.visible,
-    required this.filter,
-    required this.isAdmin,
-    required this.page,
-    required this.pageSize,
-  });
-
-  final int visible;
-  final String filter;
-  final bool isAdmin;
-  final int page;
-  final int pageSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final filterText = switch (filter) {
-      'PENDIENTE' => 'Pendientes',
-
-      'CONFIRMADA' => 'Confirmadas',
-
-      'CANCELADA' => 'Canceladas',
-
-      _ => 'Todas',
-    };
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.primaryLight.withValues(alpha: 0.15),
-
-              child: Icon(
-                Icons.event_note_outlined,
-                color: AppColors.primaryLight,
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    isAdmin ? 'Reservas de clientes' : 'Mis reservas',
-
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    filter == 'TODAS'
-                        ? '$visible reservas en esta página'
-                        : '$visible reservas · $filterText',
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    'Página $page · $pageSize por página',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
+          const SizedBox(height: 18),
+          const _NewReservationButton(),
+          if (isAdmin) ...[
+            const SizedBox(height: 12),
+            const _ManageTablesButton(),
           ],
-        ),
+          const SizedBox(height: 70),
+          const Icon(
+            Icons.event_busy_outlined,
+            size: 54,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: Text(
+              selectedFilter == 'TODAS'
+                  ? 'No hay reservas registradas.'
+                  : 'No hay reservas con este filtro.',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (currentPage > 1)
+            _PaginationControls(
+              currentPage: currentPage,
+              hasNextPage: false,
+              changingPage: changingPage,
+              onPrevious: _previousPage,
+              onNext: _nextPage,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuccessState(bool isAdmin) {
+    final confirmedCount = reservations
+        .where((item) => item.status.toUpperCase() == 'CONFIRMADA')
+        .length;
+
+    return RefreshIndicator(
+      onRefresh: () => _load(page: currentPage),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 100),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryTile(
+                  label: 'Reservas',
+                  value: '${reservations.length}',
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _SummaryTile(
+                  label: 'Confirmadas',
+                  value: '$confirmedCount',
+                  color: AppColors.success,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const _NewReservationButton(),
+          if (isAdmin) ...[
+            const SizedBox(height: 12),
+            const _ManageTablesButton(),
+          ],
+          const SizedBox(height: 20),
+          _ReservationFilter(value: selectedFilter, onChanged: _changeFilter),
+          const SizedBox(height: 18),
+          ...reservations.map(
+            (reservation) => _ReservationCard(
+              item: reservation,
+              onTap: () async {
+                final auth = AuthScope.of(context);
+
+                await Navigator.pushNamed(
+                  context,
+                  '/app/reservas/${reservation.id}',
+                );
+
+                if (!mounted) return;
+
+                if (auth.isAuthenticated) {
+                  await _load(page: currentPage);
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          _PaginationControls(
+            currentPage: currentPage,
+            hasNextPage: hasNextPage,
+            changingPage: changingPage,
+            onPrevious: _previousPage,
+            onNext: _nextPage,
+          ),
+        ],
       ),
     );
   }
 }
 
-/* ============================================================
-   PAGINACIÓN
-   ============================================================ */
+// ============================================================
+// PAGINACIÓN
+// ============================================================
 
 class _PaginationControls extends StatelessWidget {
   const _PaginationControls({
     required this.currentPage,
-    required this.hasPrevious,
-    required this.hasNext,
+    required this.hasNextPage,
+    required this.changingPage,
     required this.onPrevious,
     required this.onNext,
   });
 
   final int currentPage;
-  final bool hasPrevious;
-  final bool hasNext;
+  final bool hasNextPage;
+  final bool changingPage;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Página anterior',
-              onPressed: hasPrevious ? onPrevious : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-
-            Expanded(
-              child: Text(
-                'Página $currentPage',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-
-            IconButton(
-              tooltip: 'Página siguiente',
-              onPressed: hasNext ? onNext : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE4E1DF)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            tooltip: 'Página anterior',
+            onPressed: currentPage > 1 && !changingPage ? onPrevious : null,
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Página $currentPage',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 12),
+          IconButton(
+            tooltip: 'Página siguiente',
+            onPressed: hasNextPage && !changingPage ? onNext : null,
+            icon: const Icon(Icons.arrow_forward_ios_rounded),
+          ),
+        ],
       ),
     );
   }
 }
 
-/* ============================================================
-   TARJETA DE RESERVA
-   ============================================================ */
+// ============================================================
+// RESUMEN
+// ============================================================
 
-class ReservationCard extends StatelessWidget {
-  const ReservationCard({
-    super.key,
-    required this.reservation,
-    required this.isAdmin,
-    this.onChanged,
+class _SummaryTile extends StatelessWidget {
+  const _SummaryTile({
+    required this.label,
+    required this.value,
+    required this.color,
   });
 
-  final Reservation reservation;
-  final bool isAdmin;
-
-  final Future<void> Function()? onChanged;
-
-  String _statusLabel(String status) {
-    switch (status.toUpperCase()) {
-      case 'CONFIRMADA':
-        return 'Confirmada';
-
-      case 'CANCELADA':
-        return 'Cancelada';
-
-      default:
-        return 'Pendiente';
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'CONFIRMADA':
-        return Colors.green;
-
-      case 'CANCELADA':
-        return Colors.red;
-
-      default:
-        return Colors.orange;
-    }
-  }
-
-  Future<void> _openDetail(BuildContext context) async {
-    final result = await Navigator.pushNamed(
-      context,
-      '/app/reservas/${reservation.id}',
-    );
-
-    if (result == true) {
-      await onChanged?.call();
-    }
-  }
+  final String label;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final ecuadorDate = utcToEcuador(reservation.date);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE4E1DF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              height: 1,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    final dateText =
-        '${ecuadorDate.day.toString().padLeft(2, '0')}/'
-        '${ecuadorDate.month.toString().padLeft(2, '0')}/'
-        '${ecuadorDate.year}';
+// ============================================================
+// BOTONES PRINCIPALES
+// ============================================================
 
-    final timeText =
-        '${ecuadorDate.hour.toString().padLeft(2, '0')}:'
-        '${ecuadorDate.minute.toString().padLeft(2, '0')}';
+class _NewReservationButton extends StatelessWidget {
+  const _NewReservationButton();
 
-    final statusColor = _statusColor(reservation.status);
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.pushNamed(context, '/app/reservas/nueva');
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva reserva'),
+      ),
+    );
+  }
+}
 
-    final clientName = reservation.clientName ?? 'Cliente';
+class _ManageTablesButton extends StatelessWidget {
+  const _ManageTablesButton();
 
-    final tableText = reservation.tableNumber?.trim().isNotEmpty == true
-        ? reservation.tableNumber!
-        : 'No asignada';
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          Navigator.pushNamed(context, '/app/mesas');
+        },
+        icon: const Icon(Icons.table_restaurant_outlined),
+        label: const Text('Gestionar mesas'),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// FILTRO
+// ============================================================
+
+class _ReservationFilter extends StatelessWidget {
+  const _ReservationFilter({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  static const options = ['TODAS', 'PENDIENTE', 'CONFIRMADA', 'CANCELADA'];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: options.map((option) {
+          final selected = value == option;
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(
+                option == 'TODAS'
+                    ? 'Todas'
+                    : option[0] + option.substring(1).toLowerCase(),
+              ),
+              selected: selected,
+              onSelected: (_) {
+                onChanged(option);
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// TARJETA DE RESERVA
+// ============================================================
+
+class _ReservationCard extends StatelessWidget {
+  const _ReservationCard({required this.item, required this.onTap});
+
+  final Reservation item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = item.status == 'CONFIRMADA'
+        ? AppColors.success
+        : item.status == 'CANCELADA'
+        ? AppColors.error
+        : AppColors.warning;
+
+    final statusLabel = item.status == 'CONFIRMADA'
+        ? 'Confirmada'
+        : item.status == 'CANCELADA'
+        ? 'Cancelada'
+        : 'Pendiente';
 
     return Card(
-      elevation: 2,
-      clipBehavior: Clip.antiAlias,
-
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: Color(0xFFE4E1DF)),
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: InkWell(
-        onTap: () => _openDetail(context),
-
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-
+          padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-
             children: [
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      'Reserva #${reservation.id}',
+                      'Mesa ${item.tableNumber ?? item.tableId}',
                       style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
-
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 8,
+                      vertical: 5,
                     ),
-
                     decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-
-                      borderRadius: BorderRadius.circular(20),
+                      color: statusColor.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(7),
                     ),
-
                     child: Text(
-                      _statusLabel(reservation.status),
-
+                      statusLabel,
                       style: TextStyle(
                         color: statusColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ],
               ),
-
-              const SizedBox(height: 16),
-
-              _CardInfoRow(
-                icon: Icons.table_restaurant_outlined,
-                text: 'Mesa: $tableText',
-              ),
-
-              if (isAdmin)
-                _CardInfoRow(icon: Icons.person_outline, text: clientName),
-
-              _CardInfoRow(icon: Icons.calendar_today_outlined, text: dateText),
-
-              _CardInfoRow(icon: Icons.access_time_outlined, text: timeText),
-
-              _CardInfoRow(
-                icon: Icons.people_outline,
-                text: '${reservation.people} persona(s)',
-              ),
-
-              const SizedBox(height: 8),
-
-              Align(
-                alignment: Alignment.centerRight,
-
-                child: TextButton.icon(
-                  onPressed: () => _openDetail(context),
-
-                  icon: const Icon(Icons.arrow_forward),
-
-                  label: const Text('Ver detalle'),
+              const SizedBox(height: 6),
+              Text(
+                AuthScope.of(context).userRole == 'ADMIN'
+                    ? item.clientName ?? 'Reserva de mesa'
+                    : 'Mi reserva',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
                 ),
+              ),
+              const SizedBox(height: 11),
+              Wrap(
+                spacing: 12,
+                runSpacing: 7,
+                children: [
+                  _ReservationMeta(
+                    icon: Icons.calendar_today_outlined,
+                    text:
+                        '${item.date.day} ${_month(item.date.month)} ${item.date.year}',
+                  ),
+                  _ReservationMeta(
+                    icon: Icons.access_time_outlined,
+                    text:
+                        '${item.date.hour.toString().padLeft(2, '0')}:${item.date.minute.toString().padLeft(2, '0')}',
+                  ),
+                  _ReservationMeta(
+                    icon: Icons.people_alt_outlined,
+                    text: '${item.people} personas',
+                  ),
+                ],
               ),
             ],
           ),
@@ -935,37 +700,31 @@ class ReservationCard extends StatelessWidget {
   }
 }
 
-/* ============================================================
-   FILA DE INFORMACIÓN
-   ============================================================ */
-
-class _CardInfoRow extends StatelessWidget {
-  const _CardInfoRow({required this.icon, required this.text});
+class _ReservationMeta extends StatelessWidget {
+  const _ReservationMeta({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-
-      child: Row(
-        children: [
-          Icon(icon, size: 19, color: AppColors.primaryLight),
-
-          const SizedBox(width: 10),
-
-          Expanded(child: Text(text)),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.primaryLight),
+        const SizedBox(width: 5),
+        Text(
+          text,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
+      ],
     );
   }
 }
 
-/* ============================================================
-   DETALLE DE RESERVA
-   ============================================================ */
+// ============================================================
+// DETALLE DE RESERVA
+// ============================================================
 
 class ReservationDetailPage extends StatefulWidget {
   const ReservationDetailPage({super.key, required this.id});
@@ -985,64 +744,30 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    if (initialized) {
-      return;
+    if (initialized) return;
+
+    final token = AuthScope.of(context).accessToken;
+
+    if (token == null || token.isEmpty) {
+      request = Future.error(const ApiException(401, 'Sesión no disponible.'));
+    } else {
+      request = ApiService.getReservation(token, widget.id);
     }
 
     initialized = true;
-
-    request = _loadReservation();
   }
-
-  Future<Reservation> _loadReservation() async {
-    final auth = AuthScope.of(context);
-
-    final token = auth.accessToken;
-
-    if (token == null || token.isEmpty) {
-      throw const ApiException(401, 'La sesión no está disponible.');
-    }
-
-    return ApiService.getReservation(token, widget.id);
-  }
-
-  void _refresh() {
-    if (!mounted) return;
-
-    setState(() {
-      request = _loadReservation();
-    });
-  }
-
-  /* ==========================================================
-     CAMBIAR ESTADO
-     ========================================================== */
 
   Future<void> _changeStatus(Reservation item, String status) async {
-    final auth = AuthScope.of(context);
-
-    final token = auth.accessToken;
-
-    if (token == null || token.isEmpty) {
-      _showMessage('La sesión no está disponible.', isError: true);
-
-      return;
-    }
-
-    final isConfirm = status == 'CONFIRMADA';
-
-    final isCancel = status == 'CANCELADA';
-
-    final actionText = isConfirm ? 'confirmar' : 'cancelar';
+    final action = status == 'CONFIRMADA' ? 'confirmar' : 'cancelar';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(isConfirm ? 'Confirmar reserva' : 'Cancelar reserva'),
-
-          content: Text('¿Deseas $actionText la reserva #${item.id}?'),
-
+          title: Text(
+            status == 'CONFIRMADA' ? 'Confirmar reserva' : 'Cancelar reserva',
+          ),
+          content: Text('¿Desea $action la reserva #${item.id}?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -1050,13 +775,11 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
               },
               child: const Text('No'),
             ),
-
-            ElevatedButton(
+            FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-
-              child: Text(isConfirm ? 'Confirmar' : 'Cancelar'),
+              child: Text('Sí, $action'),
             ),
           ],
         );
@@ -1068,83 +791,304 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     }
 
     try {
+      final token = AuthScope.of(context).accessToken;
+
+      if (token == null || token.isEmpty) {
+        throw const ApiException(401, 'Sesión no disponible.');
+      }
+
       await ApiService.updateReservationStatus(
         token: token,
         id: item.id,
         status: status,
       );
 
-      if (isCancel) {
-        await NotificationService.cancelReservationNotification(item.id);
+      // ========================================================
+      // NOTIFICACIONES
+      // ========================================================
+
+      if (status == 'CONFIRMADA') {
+        await NotificationService.requestPermission();
+
+        await NotificationService.showReservationConfirmed(
+          reservationId: item.id,
+        );
+      } else if (status == 'CANCELADA') {
+        await NotificationService.cancelReservationReminder(item.id);
+
+        await NotificationService.requestPermission();
+
+        await NotificationService.showReservationCancelled(
+          reservationId: item.id,
+        );
       }
 
       if (!mounted) return;
 
-      _showMessage(
-        isConfirm
-            ? 'Reserva confirmada correctamente.'
-            : 'Reserva cancelada correctamente.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'CONFIRMADA'
+                ? 'Reserva confirmada.'
+                : 'Reserva cancelada.',
+          ),
+        ),
       );
 
-      _refresh();
+      setState(() {
+        request = ApiService.getReservation(token, widget.id);
+      });
     } on ApiException catch (error) {
       if (!mounted) return;
 
-      _showMessage(error.message, isError: true);
-    } catch (error) {
-      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
 
-      _showMessage(
-        'No fue posible actualizar la reserva: $error',
-        isError: true,
-      );
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(context, '/login');
+
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
-  /* ==========================================================
-     ELIMINAR
-     ========================================================== */
+  Future<void> _edit(Reservation item) async {
+    final peopleController = TextEditingController(
+      text: item.people.toString(),
+    );
 
-  Future<void> _deleteReservation(Reservation item) async {
-    final auth = AuthScope.of(context);
+    final formKey = GlobalKey<FormState>();
 
-    final token = auth.accessToken;
+    DateTime editDate = utcToEcuador(item.date);
 
-    if (token == null || token.isEmpty) {
-      _showMessage('La sesión no está disponible.', isError: true);
+    TimeOfDay editTime = TimeOfDay.fromDateTime(editDate);
 
-      return;
+    bool savingEdit = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar reserva'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: peopleController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Número de personas',
+                        prefixIcon: Icon(Icons.people_outline),
+                      ),
+                      validator: (value) {
+                        final number = int.tryParse(value ?? '');
+
+                        if (number == null || number < 1 || number > 20) {
+                          return 'Ingrese entre 1 y 20 personas.';
+                        }
+
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.calendar_today_outlined),
+                            label: Text(
+                              '${editDate.day}/${editDate.month}/${editDate.year}',
+                            ),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: dialogContext,
+                                firstDate: ecuadorToday(),
+                                lastDate: ecuadorToday().add(
+                                  const Duration(days: 365),
+                                ),
+                                initialDate: editDate,
+                              );
+
+                              if (picked == null || !dialogContext.mounted) {
+                                return;
+                              }
+
+                              setDialogState(() {
+                                editDate = DateTime(
+                                  picked.year,
+                                  picked.month,
+                                  picked.day,
+                                  editTime.hour,
+                                  editTime.minute,
+                                );
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.access_time_outlined),
+                            label: Text(_formatTime(editTime)),
+                            onPressed: () async {
+                              final picked = await showTimePicker(
+                                context: dialogContext,
+                                initialTime: editTime,
+                              );
+
+                              if (picked == null || !dialogContext.mounted) {
+                                return;
+                              }
+
+                              setDialogState(() {
+                                editTime = picked;
+
+                                editDate = DateTime(
+                                  editDate.year,
+                                  editDate.month,
+                                  editDate.day,
+                                  picked.hour,
+                                  picked.minute,
+                                );
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext, false);
+                  },
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: savingEdit
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) {
+                            return;
+                          }
+
+                          setDialogState(() {
+                            savingEdit = true;
+                          });
+
+                          try {
+                            final auth = AuthScope.of(context);
+
+                            final token = auth.accessToken;
+
+                            if (token == null || token.isEmpty) {
+                              throw const ApiException(
+                                401,
+                                'Sesión no disponible.',
+                              );
+                            }
+
+                            await ApiService.updateReservation(
+                              token: token,
+                              id: item.id,
+                              date: ecuadorToUtc(editDate),
+                              people: int.parse(peopleController.text),
+                              userId: auth.userId ?? 0,
+                              tableId: item.tableId,
+                            );
+
+                            // Cancelar recordatorio anterior.
+                            await NotificationService.cancelReservationReminder(
+                              item.id,
+                            );
+
+                            // Programar nuevo recordatorio.
+                            await NotificationService.requestPermission();
+
+                            await NotificationService.scheduleReservationReminder(
+                              reservationId: item.id,
+                              reservationDateTime: editDate,
+                              minutesBefore: 30,
+                            );
+
+                            if (!dialogContext.mounted) {
+                              return;
+                            }
+
+                            Navigator.pop(dialogContext, true);
+                          } on ApiException catch (error) {
+                            if (dialogContext.mounted) {
+                              setDialogState(() {
+                                savingEdit = false;
+                              });
+                            }
+
+                            if (!mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(error.message)),
+                            );
+                          }
+                        },
+                  child: savingEdit
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    peopleController.dispose();
+
+    if (result == true && mounted) {
+      final token = AuthScope.of(context).accessToken;
+
+      if (token == null || token.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        request = ApiService.getReservation(token, widget.id);
+      });
     }
+  }
 
+  Future<void> _delete(Reservation item) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Eliminar reserva'),
-
-          content: Text(
-            '¿Deseas eliminar la reserva #${item.id}?\n\n'
-            'La reserva dejará de aparecer en el listado.',
-          ),
-
+          content: Text('¿Desea eliminar la reserva #${item.id}?'),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext, false);
               },
-              child: const Text('No'),
+              child: const Text('Cancelar'),
             ),
-
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-
+            FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-
               child: const Text('Eliminar'),
             ),
           ],
@@ -1157,376 +1101,159 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     }
 
     try {
-      /*
-       * El backend ahora coloca
-       * deletedAt.
-       */
+      final token = AuthScope.of(context).accessToken;
+
+      if (token == null || token.isEmpty) {
+        throw const ApiException(401, 'Sesión no disponible.');
+      }
+
       await ApiService.deleteReservation(token: token, id: item.id);
+
+      // Cancelar todas las notificaciones asociadas.
+      await NotificationService.cancelReservationNotification(item.id);
 
       if (!mounted) return;
 
-      /*
-       * true hace que la página
-       * anterior vuelva a consultar
-       * el backend.
-       */
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Reserva eliminada.')));
+
       Navigator.pop(context, true);
     } on ApiException catch (error) {
       if (!mounted) return;
 
-      _showMessage(error.message, isError: true);
-    } catch (error) {
-      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
 
-      _showMessage('No fue posible eliminar la reserva: $error', isError: true);
-    }
-  }
+        if (!mounted) return;
 
-  /* ==========================================================
-     EDITAR
-     ========================================================== */
+        Navigator.pushReplacementNamed(context, '/login');
 
-  Future<void> _edit(Reservation item) async {
-    final result = await Navigator.pushNamed(
-      context,
-      '/app/reservas/editar/${item.id}',
-    );
+        return;
+      }
 
-    if (!mounted) return;
-
-    if (result == true) {
-      _refresh();
-    }
-  }
-
-  /* ==========================================================
-     MENSAJE
-     ========================================================== */
-
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-
-        backgroundColor: isError ? Colors.red : null,
-      ),
-    );
-  }
-
-  String _statusLabel(String status) {
-    switch (status.toUpperCase()) {
-      case 'CONFIRMADA':
-        return 'Confirmada';
-
-      case 'CANCELADA':
-        return 'Cancelada';
-
-      default:
-        return 'Pendiente';
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'CONFIRMADA':
-        return Colors.green;
-
-      case 'CANCELADA':
-        return Colors.red;
-
-      default:
-        return Colors.orange;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AuthScope.of(context).userRole == 'ADMIN';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle de reserva')),
-
       body: FutureBuilder<Reservation>(
         future: request,
-
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (snapshot.hasError) {
-            final error = snapshot.error;
+          if (snapshot.hasError || !snapshot.hasData) {
+            return const _ErrorView(message: 'No se pudo cargar el detalle.');
+          }
 
-            final message = error is ApiException
-                ? error.message
-                : 'No fue posible cargar la reserva.\n$error';
+          final item = snapshot.data!;
 
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 60,
-                      color: Colors.red,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    Text(message, textAlign: TextAlign.center),
-
-                    const SizedBox(height: 20),
-
-                    ElevatedButton.icon(
-                      onPressed: _refresh,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reintentar'),
-                    ),
-                  ],
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Detalle de reserva #${item.id}',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            );
-          }
-
-          final item = snapshot.data;
-
-          if (item == null) {
-            return const Center(child: Text('Reserva no encontrada.'));
-          }
-
-          return _buildDetail(item);
+              const SizedBox(height: 20),
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFE4E1DF)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Información de la reserva',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      _DetailRow(
+                        icon: Icons.table_restaurant_outlined,
+                        label: 'Mesa',
+                        value: 'Mesa ${item.tableNumber ?? item.tableId}',
+                      ),
+                      _DetailRow(
+                        icon: Icons.event_outlined,
+                        label: 'Fecha',
+                        value:
+                            '${utcToEcuador(item.date).day} ${_month(utcToEcuador(item.date).month)} ${utcToEcuador(item.date).year}',
+                      ),
+                      _DetailRow(
+                        icon: Icons.access_time_outlined,
+                        label: 'Hora',
+                        value:
+                            '${utcToEcuador(item.date).hour.toString().padLeft(2, '0')}:${utcToEcuador(item.date).minute.toString().padLeft(2, '0')}',
+                      ),
+                      _DetailRow(
+                        icon: Icons.people_alt_outlined,
+                        label: 'Personas',
+                        value: '${item.people} personas',
+                      ),
+                      _DetailRow(
+                        icon: Icons.info_outline,
+                        label: 'Estado',
+                        value: item.status,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: () => _edit(item),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar reserva'),
+              ),
+              const SizedBox(height: 10),
+              if (isAdmin && item.status == 'PENDIENTE')
+                ElevatedButton.icon(
+                  onPressed: () => _changeStatus(item, 'CONFIRMADA'),
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Confirmar reserva'),
+                ),
+              if (item.status != 'CANCELADA')
+                OutlinedButton.icon(
+                  onPressed: () => _changeStatus(item, 'CANCELADA'),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancelar reserva'),
+                ),
+              if (isAdmin) ...[
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () => _delete(item),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Eliminar reserva'),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                ),
+              ],
+            ],
+          );
         },
       ),
     );
   }
-
-  /* ==========================================================
-     DETALLE
-     ========================================================== */
-
-  Widget _buildDetail(Reservation item) {
-    final ecuadorDate = utcToEcuador(item.date);
-
-    final dateText =
-        '${ecuadorDate.day.toString().padLeft(2, '0')}/'
-        '${ecuadorDate.month.toString().padLeft(2, '0')}/'
-        '${ecuadorDate.year}';
-
-    final timeText =
-        '${ecuadorDate.hour.toString().padLeft(2, '0')}:'
-        '${ecuadorDate.minute.toString().padLeft(2, '0')}';
-
-    final statusColor = _statusColor(item.status);
-
-    final statusLabel = _statusLabel(item.status);
-
-    final admin = AuthScope.of(context).userRole == 'ADMIN';
-
-    final canConfirm = admin && item.status.toUpperCase() == 'PENDIENTE';
-
-    final canCancel = item.status.toUpperCase() != 'CANCELADA';
-
-    final canDelete = admin;
-
-    final tableText = item.tableNumber?.trim().isNotEmpty == true
-        ? item.tableNumber!
-        : 'No asignada';
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 32,
-
-                  backgroundColor: statusColor.withValues(alpha: 0.12),
-
-                  child: Icon(Icons.event_note, size: 34, color: statusColor),
-                ),
-
-                const SizedBox(height: 14),
-
-                Text(
-                  'Reserva #${item.id}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                const Text(
-                  'Información de la reserva',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 20),
-
-                _DetailRow(
-                  icon: Icons.table_restaurant_outlined,
-                  label: 'Mesa',
-                  value: tableText,
-                ),
-
-                if (admin)
-                  _DetailRow(
-                    icon: Icons.person_outline,
-                    label: 'Cliente',
-                    value: item.clientName ?? 'Cliente',
-                  ),
-
-                _DetailRow(
-                  icon: Icons.calendar_today_outlined,
-                  label: 'Fecha',
-                  value: dateText,
-                ),
-
-                _DetailRow(
-                  icon: Icons.access_time_outlined,
-                  label: 'Hora',
-                  value: timeText,
-                ),
-
-                _DetailRow(
-                  icon: Icons.people_outline,
-                  label: 'Personas',
-                  value: '${item.people}',
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        const Text(
-          'Acciones',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-
-        const SizedBox(height: 12),
-
-        /* EDITAR */
-        ElevatedButton.icon(
-          onPressed: item.status.toUpperCase() == 'CANCELADA'
-              ? null
-              : () => _edit(item),
-
-          icon: const Icon(Icons.edit),
-
-          label: const Text('Editar reserva'),
-        ),
-
-        const SizedBox(height: 10),
-
-        /* CONFIRMAR */
-        if (canConfirm)
-          ElevatedButton.icon(
-            onPressed: () => _changeStatus(item, 'CONFIRMADA'),
-
-            icon: const Icon(Icons.check_circle_outline),
-
-            label: const Text('Confirmar reserva'),
-          ),
-
-        if (canConfirm) const SizedBox(height: 10),
-
-        /* CANCELAR */
-        if (canCancel)
-          OutlinedButton.icon(
-            onPressed: () => _changeStatus(item, 'CANCELADA'),
-
-            icon: const Icon(Icons.cancel_outlined),
-
-            label: const Text('Cancelar reserva'),
-          ),
-
-        if (canCancel && canDelete) const SizedBox(height: 10),
-
-        /* ELIMINAR */
-        if (canDelete)
-          OutlinedButton.icon(
-            onPressed: () => _deleteReservation(item),
-
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-
-              side: const BorderSide(color: Colors.red),
-            ),
-
-            icon: const Icon(Icons.delete_outline),
-
-            label: const Text('Eliminar reserva'),
-          ),
-
-        if (!admin)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-
-            child: Text(
-              item.status.toUpperCase() == 'CANCELADA'
-                  ? 'Esta reserva ya está cancelada.'
-                  : 'Como cliente, solo puedes cancelar tu propia reserva.',
-
-              textAlign: TextAlign.center,
-
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-            ),
-          ),
-      ],
-    );
-  }
 }
-
-/* ============================================================
-   FILA DEL DETALLE
-   ============================================================ */
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
@@ -1542,44 +1269,40 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-
+      padding: const EdgeInsets.only(bottom: 15),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
-          Icon(icon, color: AppColors.primaryLight),
-
+          Icon(icon, size: 20, color: AppColors.primaryLight),
           const SizedBox(width: 10),
-
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-
-          Expanded(child: Text(value)),
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-/* ============================================================
-   CREAR RESERVA
-   ============================================================ */
+// ============================================================
+// NUEVA RESERVA
+// ============================================================
 
 class CreateReservationPage extends StatefulWidget {
   const CreateReservationPage({super.key});
 
-  /*
-   * El asistente solamente
-   * entrega datos de fecha,
-   * hora y personas.
-   *
-   * La mesa NO se selecciona
-   * automáticamente.
-   */
   static String? draftPeople;
-
   static DateTime? draftDate;
-
   static TimeOfDay? draftTime;
 
   static int? draftTableId;
@@ -1593,22 +1316,14 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
   final _peopleController = TextEditingController();
 
-  DateTime selectedDate = ecuadorToday();
-
-  TimeOfDay selectedTime = TimeOfDay.fromDateTime(ecuadorNow());
+  DateTime? selectedDate;
+  TimeOfDay? selectedTime;
 
   List<Map<String, dynamic>> tables = [];
 
-  /*
-   * IMPORTANTE:
-   *
-   * Siempre inicia null.
-   * No hay mesa seleccionada.
-   */
   int? selectedTableId;
 
-  bool loadingTables = true;
-
+  bool loadingTables = false;
   bool saving = false;
 
   String? errorMessage;
@@ -1618,17 +1333,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     super.initState();
 
     _applyDraft();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      _loadTables();
-    });
   }
-
-  /* ==========================================================
-     BORRADOR DEL ASISTENTE
-     ========================================================== */
 
   void _applyDraft() {
     final draftPeople = CreateReservationPage.draftPeople;
@@ -1637,217 +1342,184 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
     final draftTime = CreateReservationPage.draftTime;
 
-    /*
-     * NO usamos draftTableId.
-     *
-     * El usuario debe escoger
-     * la mesa manualmente.
-     */
+    _peopleController.text = draftPeople ?? '';
+
+    selectedDate = draftDate;
+    selectedTime = draftTime;
+
     selectedTableId = null;
 
-    if (draftPeople != null && draftPeople.trim().isNotEmpty) {
-      _peopleController.text = draftPeople.trim();
-    }
+    CreateReservationPage.draftPeople = null;
+    CreateReservationPage.draftDate = null;
+    CreateReservationPage.draftTime = null;
+    CreateReservationPage.draftTableId = null;
 
-    if (draftDate != null) {
-      selectedDate = DateTime(draftDate.year, draftDate.month, draftDate.day);
-    }
+    if (selectedDate != null && selectedTime != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
 
-    if (draftTime != null) {
-      selectedTime = draftTime;
+        _loadTables();
+      });
     }
   }
-
-  @override
-  void dispose() {
-    _peopleController.dispose();
-
-    super.dispose();
-  }
-
-  /* ==========================================================
-     CARGAR MESAS DISPONIBLES
-     ========================================================== */
 
   Future<void> _loadTables() async {
     if (!mounted) return;
 
+    if (selectedDate == null || selectedTime == null) {
+      setState(() {
+        tables = [];
+        selectedTableId = null;
+        loadingTables = false;
+      });
+
+      return;
+    }
+
     setState(() {
       loadingTables = true;
       errorMessage = null;
-
-      /*
-       * Cada vez que cambia
-       * fecha/hora quitamos
-       * la selección anterior.
-       */
       selectedTableId = null;
     });
 
     try {
       final auth = AuthScope.of(context);
-
       final token = auth.accessToken;
 
       if (token == null || token.isEmpty) {
         throw const ApiException(401, 'La sesión no está disponible.');
       }
 
-      /*
-       * Fecha + hora exactas
-       * seleccionadas por el usuario.
-       */
-      final ecuadorDateTime = buildEcuadorDateTime(selectedDate, selectedTime);
+      final ecuadorDateTime = buildEcuadorDateTime(
+        selectedDate!,
+        selectedTime!,
+      );
 
-      /*
-       * Convertimos Ecuador -> UTC
-       * antes de enviarlo al backend.
-       */
       final utcDateTime = ecuadorToUtc(ecuadorDateTime);
 
-      /*
-       * El backend devuelve
-       * únicamente las mesas que
-       * están disponibles para
-       * esa fecha/hora.
-       */
+      debugPrint('CONSULTANDO MESAS DISPONIBLES:');
+
+      debugPrint(utcDateTime.toIso8601String());
+
       final result = await ApiService.getAvailableTables(
         token,
         date: utcDateTime,
       );
 
+      debugPrint('RESPUESTA MESAS DISPONIBLES: $result');
+
       if (!mounted) return;
 
+      final validTables = result
+          .where((item) => item['id'] is num && item['numero'] != null)
+          .map(
+            (item) => <String, dynamic>{
+              'id': (item['id'] as num).toInt(),
+              'numero': item['numero'].toString(),
+              'capacidad': item['capacidad'] is num
+                  ? (item['capacidad'] as num).toInt()
+                  : 0,
+              'disponible': item['disponible'] == true,
+            },
+          )
+          .toList();
+
       setState(() {
-        tables = result.map<Map<String, dynamic>>((item) {
-          return {
-            'id': item['id'],
-            'numero': item['numero'],
-            'capacidad': item['capacidad'],
-            'disponible': item['disponible'],
-          };
-        }).toList();
-
-        loadingTables = false;
-
-        /*
-         * Nunca dejamos una
-         * mesa seleccionada
-         * automáticamente.
-         */
+        tables = validTables;
         selectedTableId = null;
+        loadingTables = false;
       });
     } on ApiException catch (error) {
       if (!mounted) return;
 
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
+
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(
+          context,
+          '/login',
+          arguments: '/app/reservas/nueva',
+        );
+
+        return;
+      }
+
       setState(() {
-        loadingTables = false;
-
-        errorMessage = error.message;
-
+        tables = [];
         selectedTableId = null;
+        loadingTables = false;
+        errorMessage = error.message;
       });
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        loadingTables = false;
-
-        errorMessage = 'No fue posible cargar las mesas: $error';
-
+        tables = [];
         selectedTableId = null;
+        loadingTables = false;
+        errorMessage = 'No fue posible consultar las mesas disponibles.';
       });
+
+      debugPrint('ERROR MESAS: $error');
     }
   }
 
-  /* ==========================================================
-     FECHA
-     ========================================================== */
+  @override
+  void dispose() {
+    _peopleController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickDate() async {
     final today = ecuadorToday();
 
-    final initialDate = selectedDate.isBefore(today) ? today : selectedDate;
-
     final picked = await showDatePicker(
       context: context,
-
-      initialDate: initialDate,
-
       firstDate: today,
-
-      lastDate: DateTime(today.year + 1, 12, 31),
-
-      helpText: 'Selecciona la fecha',
-
-      cancelText: 'Cancelar',
-
-      confirmText: 'Aceptar',
+      lastDate: today.add(const Duration(days: 365)),
+      initialDate: selectedDate != null && !selectedDate!.isBefore(today)
+          ? selectedDate!
+          : today,
     );
 
-    if (!mounted || picked == null) {
+    if (picked == null || !mounted) {
       return;
     }
 
     setState(() {
       selectedDate = DateTime(picked.year, picked.month, picked.day);
 
-      /*
-       * La mesa anterior ya
-       * no se considera válida
-       * hasta volver a consultar.
-       */
       selectedTableId = null;
+      errorMessage = null;
     });
 
-    /*
-     * Recargar mesas para
-     * la nueva fecha.
-     */
-    await _loadTables();
+    if (selectedTime != null) {
+      await _loadTables();
+    }
   }
-
-  /* ==========================================================
-     HORA
-     ========================================================== */
 
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
-
-      initialTime: selectedTime,
-
-      helpText: 'Selecciona la hora',
-
-      cancelText: 'Cancelar',
-
-      confirmText: 'Aceptar',
+      initialTime: selectedTime ?? const TimeOfDay(hour: 19, minute: 0),
     );
 
-    if (!mounted || picked == null) {
+    if (picked == null || !mounted) {
       return;
     }
 
     setState(() {
       selectedTime = picked;
-
-      /*
-       * Limpiamos mesa porque
-       * cambió la hora.
-       */
       selectedTableId = null;
+      errorMessage = null;
     });
 
-    /*
-     * Recargar mesas para
-     * la nueva hora.
-     */
-    await _loadTables();
+    if (selectedDate != null) {
+      await _loadTables();
+    }
   }
-
-  /* ==========================================================
-     FORMATO FECHA
-     ========================================================== */
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/'
@@ -1855,18 +1527,33 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         '${date.year}';
   }
 
-  /* ==========================================================
-     FORMATO HORA
-     ========================================================== */
+  String _formatDateDisplay(DateTime date) {
+    final today = ecuadorToday();
+    final tomorrow = today.add(const Duration(days: 1));
+
+    if (_sameDate(date, today)) {
+      return 'Hoy · ${_formatDate(date)}';
+    }
+
+    if (_sameDate(date, tomorrow)) {
+      return 'Mañana · ${_formatDate(date)}';
+    }
+
+    return _formatDate(date);
+  }
+
+  bool _sameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
 
   String _formatTime(TimeOfDay time) {
     return '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}';
   }
 
-  /* ==========================================================
-     MESA SELECCIONADA
-     ========================================================== */
+  int? _peopleCount() {
+    return int.tryParse(_peopleController.text.trim());
+  }
 
   Map<String, dynamic>? _selectedTable() {
     if (selectedTableId == null) {
@@ -1874,7 +1561,9 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     }
 
     for (final table in tables) {
-      if (table['id'] == selectedTableId) {
+      final id = (table['id'] as num?)?.toInt();
+
+      if (id == selectedTableId) {
         return table;
       }
     }
@@ -1882,52 +1571,54 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     return null;
   }
 
-  /* ==========================================================
-     CREAR RESERVA
-     ========================================================== */
+  bool _tableCanFit(Map<String, dynamic> table) {
+    final people = _peopleCount();
 
-  Future<void> _submit() async {
-    if (saving) return;
+    if (people == null) {
+      return true;
+    }
 
-    FocusScope.of(context).unfocus();
+    final capacity = (table['capacidad'] as num?)?.toInt() ?? 0;
 
+    return capacity >= people;
+  }
+
+  void _selectTable(Map<String, dynamic> table) {
+    final id = (table['id'] as num?)?.toInt();
+
+    if (id == null) return;
+
+    if (!_tableCanFit(table)) {
+      final people = _peopleCount();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            people == null
+                ? 'Esta mesa no está disponible para la reserva.'
+                : 'Esta mesa tiene capacidad para ${table['capacidad']} personas.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      selectedTableId = id;
+      errorMessage = null;
+    });
+  }
+
+  Future<void> _showReservationSummary() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final auth = AuthScope.of(context);
-
-    final token = auth.accessToken;
-
-    final userId = auth.userId;
-
-    if (token == null || token.isEmpty) {
-      _showMessage('La sesión no está disponible.', isError: true);
-
-      return;
-    }
-
-    if (userId == null) {
-      _showMessage('No fue posible identificar al usuario.', isError: true);
-
-      return;
-    }
-
-    /*
-     * OBLIGATORIO:
-     * el usuario debe escoger
-     * una mesa.
-     */
-    if (selectedTableId == null) {
-      _showMessage('Selecciona una mesa.', isError: true);
-
-      return;
-    }
-
-    final people = int.tryParse(_peopleController.text.trim());
-
-    if (people == null || people <= 0) {
-      _showMessage('Ingresa una cantidad válida de personas.', isError: true);
+    if (selectedDate == null || selectedTime == null) {
+      setState(() {
+        errorMessage = 'Seleccione fecha y hora.';
+      });
 
       return;
     }
@@ -1935,83 +1626,258 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     final table = _selectedTable();
 
     if (table == null) {
-      _showMessage('La mesa seleccionada no está disponible.', isError: true);
+      setState(() {
+        errorMessage = 'Seleccione una mesa disponible.';
+      });
 
       return;
     }
 
-    final capacity = (table['capacidad'] as num?)?.toInt();
+    final people = _peopleCount() ?? 0;
 
-    if (capacity != null && people > capacity) {
-      _showMessage(
-        'La mesa seleccionada tiene capacidad para '
-        '$capacity persona(s).',
-        isError: true,
-      );
+    final capacity = (table['capacidad'] as num?)?.toInt() ?? 0;
+
+    if (people > capacity) {
+      setState(() {
+        errorMessage = 'La mesa seleccionada no tiene capacidad suficiente.';
+      });
+
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Resumen de reserva'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SummaryLine(
+                icon: Icons.people_alt_outlined,
+                label: '$people personas',
+              ),
+              const SizedBox(height: 10),
+              _SummaryLine(
+                icon: Icons.calendar_today_outlined,
+                label: _formatDateDisplay(selectedDate!),
+              ),
+              const SizedBox(height: 10),
+              _SummaryLine(
+                icon: Icons.access_time_outlined,
+                label: _formatTime(selectedTime!),
+              ),
+              const SizedBox(height: 10),
+              _SummaryLine(
+                icon: Icons.table_restaurant_outlined,
+                label: 'Mesa ${table['numero']}',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // CREAR RESERVA + NOTIFICACIONES
+  // ============================================================
+
+  Future<void> _submit() async {
+    if (!mounted) return;
+
+    setState(() {
+      errorMessage = null;
+    });
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (selectedDate == null) {
+      setState(() {
+        errorMessage = 'Seleccione una fecha.';
+      });
 
       return;
     }
 
-    final ecuadorDateTime = buildEcuadorDateTime(selectedDate, selectedTime);
-
-    final now = ecuadorNow();
-
-    if (ecuadorDateTime.isBefore(now)) {
-      _showMessage(
-        'La fecha y hora de la reserva deben ser futuras.',
-        isError: true,
-      );
+    if (selectedTime == null) {
+      setState(() {
+        errorMessage = 'Seleccione una hora.';
+      });
 
       return;
     }
+
+    final people = _peopleCount();
+
+    if (people == null || people < 1 || people > 20) {
+      setState(() {
+        errorMessage = 'Ingrese entre 1 y 20 personas.';
+      });
+
+      return;
+    }
+
+    final table = _selectedTable();
+
+    if (table == null || selectedTableId == null) {
+      setState(() {
+        errorMessage = 'Seleccione una mesa disponible.';
+      });
+
+      return;
+    }
+
+    final capacity = (table['capacidad'] as num?)?.toInt() ?? 0;
+
+    if (people > capacity) {
+      setState(() {
+        errorMessage =
+            'La mesa seleccionada tiene capacidad para $capacity personas.';
+      });
+
+      return;
+    }
+
+    final auth = AuthScope.of(context);
+    final token = auth.accessToken;
+
+    if (token == null || token.isEmpty) {
+      setState(() {
+        errorMessage = 'La sesión no está disponible.';
+      });
+
+      return;
+    }
+
+    final userId = auth.userId;
+
+    if (userId == null) {
+      setState(() {
+        errorMessage = 'No se pudo identificar al usuario.';
+      });
+
+      return;
+    }
+
+    final ecuadorDateTime = buildEcuadorDateTime(selectedDate!, selectedTime!);
+
+    final utcDateTime = ecuadorToUtc(ecuadorDateTime);
 
     setState(() {
       saving = true;
     });
 
     try {
-      await ApiService.createReservation(
+      // --------------------------------------------------------
+      // 1. Pedir permiso correctamente.
+      // --------------------------------------------------------
+
+      final permission = await NotificationService.requestPermission();
+
+      debugPrint('PERMISO NOTIFICACIONES: $permission');
+
+      // --------------------------------------------------------
+      // 2. Crear reserva.
+      // --------------------------------------------------------
+
+      final reservation = await ApiService.createReservation(
         token: token,
-
-        date: ecuadorToUtc(ecuadorDateTime),
-
+        date: utcDateTime,
         people: people,
-
         userId: userId,
-
         tableId: selectedTableId!,
+      );
+
+      // --------------------------------------------------------
+      // 3. Mostrar inmediatamente "Reserva creada".
+      //
+      // Se utiliza el ID REAL devuelto por el backend.
+      // --------------------------------------------------------
+
+      await NotificationService.showReservationCreated(
+        reservationId: reservation.id,
+      );
+
+      // --------------------------------------------------------
+      // 4. Programar recordatorio 30 minutos antes.
+      //
+      // La fecha se envía como hora local de Ecuador.
+      // --------------------------------------------------------
+
+      await NotificationService.scheduleReservationReminder(
+        reservationId: reservation.id,
+        reservationDateTime: ecuadorDateTime,
+        minutesBefore: 30,
       );
 
       if (!mounted) return;
 
-      /*
-       * Limpiar borrador.
-       */
       CreateReservationPage.draftPeople = null;
-
       CreateReservationPage.draftDate = null;
-
       CreateReservationPage.draftTime = null;
-
-      /*
-       * IMPORTANTE:
-       * también limpiamos mesa.
-       */
       CreateReservationPage.draftTableId = null;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reserva creada correctamente.')),
+        const SnackBar(content: Text('Reserva creada exitosamente.')),
       );
 
       Navigator.pop(context, true);
     } on ApiException catch (error) {
       if (!mounted) return;
 
-      _showMessage(error.message, isError: true);
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
+
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(
+          context,
+          '/login',
+          arguments: '/app/reservas/nueva',
+        );
+
+        return;
+      }
+
+      if (error.statusCode == 403) {
+        setState(() {
+          errorMessage = 'No tiene permisos para crear esta reserva.';
+        });
+
+        return;
+      }
+
+      if (error.statusCode == 422) {
+        setState(() {
+          errorMessage = error.message;
+        });
+
+        return;
+      }
+
+      setState(() {
+        errorMessage = error.message;
+      });
     } catch (error) {
       if (!mounted) return;
 
-      _showMessage('No fue posible crear la reserva: $error', isError: true);
+      setState(() {
+        errorMessage = 'Error al crear la reserva.';
+      });
+
+      debugPrint('ERROR CREANDO RESERVA: $error');
     } finally {
       if (!mounted) return;
 
@@ -2021,374 +1887,741 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     }
   }
 
-  /* ==========================================================
-     MENSAJE
-     ========================================================== */
+  Widget _buildReservationContext() {
+    if (selectedDate == null || selectedTime == null) {
+      return const SizedBox.shrink();
+    }
 
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
+    final people = _peopleCount();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-
-        backgroundColor: isError ? Colors.red : null,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6E1DE)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: const Icon(
+              Icons.event_available_outlined,
+              size: 20,
+              color: AppColors.primaryLight,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDateDisplay(selectedDate!),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Hora ${_formatTime(selectedTime!)}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (people != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6F2F0),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.people_alt_outlined,
+                    size: 15,
+                    color: AppColors.primaryLight,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    '$people',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  /* ==========================================================
-     INTERFAZ
-     ========================================================== */
+  Widget _buildTablesSection() {
+    if (selectedDate == null || selectedTime == null) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F1F0),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE5E1DF)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.event_note_outlined, color: AppColors.textSecondary),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Seleccione fecha y hora para consultar las mesas disponibles.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (loadingTables) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE4E1DF)),
+        ),
+        child: const Column(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Consultando mesas disponibles...',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (errorMessage != null && tables.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.error.withValues(alpha: .25)),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.error,
+              size: 28,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.error, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loadTables,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (tables.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE4E1DF)),
+        ),
+        child: const Column(
+          children: [
+            Icon(
+              Icons.table_restaurant_outlined,
+              size: 32,
+              color: AppColors.textSecondary,
+            ),
+            SizedBox(height: 9),
+            Text(
+              'No hay mesas disponibles',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'No encontramos mesas libres para la fecha y hora seleccionadas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final people = _peopleCount();
+
+    final suitableCount = tables.where(_tableCanFit).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildReservationContext(),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.table_restaurant_outlined,
+                size: 19,
+                color: AppColors.primaryLight,
+              ),
+            ),
+            const SizedBox(width: 9),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mesas disponibles',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Toque una mesa para seleccionarla',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1EEEC),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                '$suitableCount',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (people != null && suitableCount == 0)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Hay mesas disponibles, pero ninguna tiene capacidad para $people personas.',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ...tables.map(
+          (table) => _TableSelectionCard(
+            table: table,
+            selected: (table['id'] as num?)?.toInt() == selectedTableId,
+            canFit: _tableCanFit(table),
+            onTap: () {
+              _selectTable(table);
+            },
+          ),
+        ),
+        if (selectedTableId != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  size: 17,
+                  color: AppColors.success,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Mesa ${_selectedTable()?['numero'] ?? ''} seleccionada',
+                  style: const TextStyle(
+                    color: AppColors.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F7F6),
       appBar: AppBar(title: const Text('Nueva reserva')),
+      body: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 30),
+          children: [
+            const Text(
+              'Crear nueva reserva',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Complete los datos y seleccione directamente una mesa disponible.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 22),
 
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
+            // PERSONAS
+            TextFormField(
+              controller: _peopleController,
+              keyboardType: TextInputType.number,
+              onChanged: (_) {
+                if (selectedTableId != null) {
+                  final table = _selectedTable();
 
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                  if (table != null && !_tableCanFit(table)) {
+                    setState(() {
+                      selectedTableId = null;
+                    });
+                  } else {
+                    setState(() {});
+                  }
+                } else {
+                  setState(() {});
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Número de personas',
+                hintText: 'Ejemplo: 4',
+                prefixIcon: const Icon(Icons.people_alt_outlined),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(13),
+                  borderSide: const BorderSide(color: Color(0xFFE4E1DF)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(13),
+                  borderSide: const BorderSide(color: Color(0xFFE4E1DF)),
+                ),
+              ),
+              validator: (value) {
+                final number = int.tryParse(value ?? '');
 
-            children: [
-              /* ==================================================
-                 ENCABEZADO
-                 ================================================== */
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
+                if (number == null || number < 1 || number > 20) {
+                  return 'Ingrese entre 1 y 20 personas.';
+                }
 
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // FECHA Y HORA
+            Row(
+              children: [
+                Expanded(
+                  child: _DateTimeButton(
+                    icon: Icons.calendar_today_outlined,
+                    label: selectedDate == null
+                        ? 'Seleccionar fecha'
+                        : _formatDateDisplay(selectedDate!),
+                    onPressed: _pickDate,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DateTimeButton(
+                    icon: Icons.access_time_outlined,
+                    label: selectedTime == null
+                        ? 'Seleccionar hora'
+                        : _formatTime(selectedTime!),
+                    onPressed: _pickTime,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 22),
+
+            _buildTablesSection(),
+
+            if (errorMessage != null && tables.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  errorMessage!,
+                  style: const TextStyle(color: AppColors.error, fontSize: 12),
+                ),
+              ),
+
+            const SizedBox(height: 20),
+
+            // RESUMEN
+            SizedBox(
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: saving ? null : _showReservationSummary,
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: const Text('Ver resumen'),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // CREAR
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: saving ? null : _submit,
+                icon: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline),
+                label: Text(saving ? 'Creando reserva...' : 'Crear reserva'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// TARJETA DE MESA
+// ============================================================
+
+class _TableSelectionCard extends StatelessWidget {
+  const _TableSelectionCard({
+    required this.table,
+    required this.selected,
+    required this.canFit,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> table;
+  final bool selected;
+  final bool canFit;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final number = table['numero']?.toString() ?? 'Mesa';
+
+    final capacity = (table['capacidad'] as num?)?.toInt() ?? 0;
+
+    final enabled = canFit || _peopleValueMissing();
+
+    final primary = AppColors.primaryLight;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled
+              ? onTap
+              : () {
+                  onTap();
+                },
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+            decoration: BoxDecoration(
+              color: selected
+                  ? primary.withValues(alpha: .09)
+                  : enabled
+                  ? Colors.white
+                  : const Color(0xFFF2F0EF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? primary : const Color(0xFFE4E1DF),
+                width: selected ? 1.6 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? primary.withValues(alpha: .14)
+                        : const Color(0xFFF4F1EF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.table_restaurant_outlined,
+                    size: 22,
+                    color: selected ? primary : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-
                     children: [
-                      const Row(
+                      Text(
+                        'Mesa $number',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: enabled
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
                         children: [
-                          Icon(Icons.event_available, size: 28),
-
-                          SizedBox(width: 10),
-
+                          Icon(
+                            Icons.people_outline,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            'Datos de la reserva',
-                            style: TextStyle(
-                              fontSize: 19,
-                              fontWeight: FontWeight.bold,
+                            'Hasta $capacity personas',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 8),
-
-                      Text(
-                        'Selecciona la fecha, hora, cantidad de personas y mesa.',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
                     ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              /* PERSONAS */
-              TextFormField(
-                controller: _peopleController,
-
-                keyboardType: TextInputType.number,
-
-                textInputAction: TextInputAction.done,
-
-                decoration: const InputDecoration(
-                  labelText: 'Personas',
-
-                  hintText: 'Ejemplo: 4',
-
-                  prefixIcon: Icon(Icons.people_outline),
-
-                  border: OutlineInputBorder(),
-                ),
-
-                onChanged: (_) {
-                  setState(() {});
-                },
-
-                validator: (value) {
-                  final text = value?.trim() ?? '';
-
-                  if (text.isEmpty) {
-                    return 'Ingresa la cantidad de personas.';
-                  }
-
-                  final number = int.tryParse(text);
-
-                  if (number == null || number <= 0) {
-                    return 'Ingresa una cantidad válida.';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              /* FECHA */
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.calendar_today_outlined),
-
-                  title: const Text('Fecha'),
-
-                  subtitle: Text(_formatDate(selectedDate)),
-
-                  trailing: const Icon(Icons.chevron_right),
-
-                  onTap: saving ? null : _pickDate,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              /* HORA */
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.access_time_outlined),
-
-                  title: const Text('Hora'),
-
-                  subtitle: Text(_formatTime(selectedTime)),
-
-                  trailing: const Icon(Icons.chevron_right),
-
-                  onTap: saving ? null : _pickTime,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              /* ==================================================
-                 MESAS
-                 ================================================== */
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Selecciona una mesa',
+                const SizedBox(width: 8),
+                if (!canFit && !_peopleValueMissing())
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Text(
+                      'Capacidad insuficiente',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        color: AppColors.warning,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-
-                  if (!loadingTables)
-                    IconButton(
-                      tooltip: 'Actualizar mesas',
-                      onPressed: saving ? null : _loadTables,
-                      icon: const Icon(Icons.refresh),
+                  )
+                else
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: selected ? primary : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: selected
+                          ? null
+                          : Border.all(color: const Color(0xFFD8D3D0)),
                     ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                'Disponibles para ${_formatDate(selectedDate)} a las ${_formatTime(selectedTime)}',
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-              ),
-
-              const SizedBox(height: 8),
-
-              if (loadingTables)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-
-                    child: Center(child: CircularProgressIndicator()),
+                    child: selected
+                        ? const Icon(Icons.check, size: 17, color: Colors.white)
+                        : null,
                   ),
-                )
-              else if (errorMessage != null)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 44,
-                          color: Colors.red,
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        Text(errorMessage!, textAlign: TextAlign.center),
-
-                        const SizedBox(height: 12),
-
-                        OutlinedButton.icon(
-                          onPressed: _loadTables,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Recargar mesas'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else if (tables.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-
-                    child: Column(
-                      children: [
-                        const Icon(Icons.table_restaurant_outlined, size: 48),
-
-                        const SizedBox(height: 10),
-
-                        const Text(
-                          'No hay mesas disponibles para esta fecha y hora.',
-                          textAlign: TextAlign.center,
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        OutlinedButton.icon(
-                          onPressed: _loadTables,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Actualizar'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                ...tables.map((table) {
-                  final rawId = table['id'];
-
-                  final id = rawId is num
-                      ? rawId.toInt()
-                      : int.tryParse(rawId?.toString() ?? '');
-
-                  final numero = table['numero']?.toString() ?? 'Sin nombre';
-
-                  final capacidad = (table['capacidad'] as num?)?.toInt() ?? 0;
-
-                  if (id == null) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-
-                    child: Card(
-                      clipBehavior: Clip.antiAlias,
-
-                      child: RadioListTile<int>(
-                        value: id,
-
-                        /*
-                           * Aquí solo se
-                           * muestra seleccionado
-                           * después de que el
-                           * usuario pulse una mesa.
-                           */
-                        groupValue: selectedTableId,
-
-                        onChanged: saving
-                            ? null
-                            : (value) {
-                                if (value == null) {
-                                  return;
-                                }
-
-                                setState(() {
-                                  selectedTableId = value;
-                                });
-                              },
-
-                        title: Text(
-                          'Mesa $numero',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-
-                        subtitle: Text('Capacidad: $capacidad persona(s)'),
-
-                        secondary: const Icon(Icons.table_restaurant_outlined),
-                      ),
-                    ),
-                  );
-                }),
-
-              const SizedBox(height: 20),
-
-              /* ==================================================
-                 RESUMEN
-                 ================================================== */
-              if (selectedTableId != null)
-                Card(
-                  color: AppColors.primaryLight.withValues(alpha: 0.08),
-
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-
-                      children: [
-                        const Text(
-                          'Resumen',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        Text('Fecha: ${_formatDate(selectedDate)}'),
-
-                        Text('Hora: ${_formatTime(selectedTime)}'),
-
-                        Text(
-                          'Personas: ${_peopleController.text.isEmpty ? '-' : _peopleController.text}',
-                        ),
-
-                        Text('Mesa: ${_selectedTable()?['numero'] ?? '-'}'),
-                      ],
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: 20),
-
-              /* ==================================================
-                 CREAR
-                 ================================================== */
-              SizedBox(
-                height: 52,
-
-                child: ElevatedButton.icon(
-                  onPressed: saving ? null : _submit,
-
-                  icon: saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check_circle_outline),
-
-                  label: Text(saving ? 'Creando reserva...' : 'Crear reserva'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  bool _peopleValueMissing() {
+    return false;
+  }
+}
+
+// ============================================================
+// BOTÓN FECHA / HORA
+// ============================================================
+
+class _DateTimeButton extends StatelessWidget {
+  const _DateTimeButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(46),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// LÍNEA DE RESUMEN
+// ============================================================
+
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 19, color: AppColors.primaryLight),
+        const SizedBox(width: 9),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// ERROR
+// ============================================================
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, this.onRetry});
+
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// UTILIDADES
+// ============================================================
+
+String _month(int month) {
+  return const [
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic',
+  ][month - 1];
+}
+
+String _formatTime(TimeOfDay time) {
+  return '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 }
