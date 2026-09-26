@@ -35,9 +35,7 @@ class AIResponse {
 
   final String answer;
   final String? role;
-
   final Map<String, dynamic>? reservationDraft;
-
   final AIAvailability? availability;
 }
 
@@ -76,7 +74,7 @@ class ApiService {
   // DIRECCIONES DEL BACKEND
   // =========================================================
 
-  /// Emulador Android:
+  /// Emulador Android.
   /// 10.0.2.2 apunta al localhost de la computadora.
   static const String emulatorBaseUrl = 'http://10.0.2.2:3000';
 
@@ -87,7 +85,6 @@ class ApiService {
   ///
   /// flutter run
   /// --dart-define=API_BASE_URL=http://192.168.1.3:3000
-  ///
   static const String configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
@@ -95,6 +92,7 @@ class ApiService {
 
   /// URL que utilizará la aplicación.
   static String get baseUrl {
+    // Si se especifica API_BASE_URL, tiene prioridad.
     if (configuredBaseUrl.isNotEmpty) {
       return configuredBaseUrl;
     }
@@ -103,8 +101,9 @@ class ApiService {
       return physicalDeviceBaseUrl;
     }
 
+    // Android Emulator.
     if (Platform.isAndroid) {
-      return physicalDeviceBaseUrl;
+      return emulatorBaseUrl;
     }
 
     return physicalDeviceBaseUrl;
@@ -173,7 +172,6 @@ class ApiService {
         .timeout(const Duration(seconds: 10));
 
     print('LOGIN STATUS: ${response.statusCode}');
-
     print('LOGIN BODY: ${response.body}');
 
     return _decode(response);
@@ -263,18 +261,6 @@ class ApiService {
   // RESERVAS
   // =========================================================
 
-  /// Obtiene las reservas.
-  ///
-  /// Los parámetros son opcionales.
-  ///
-  /// estado:
-  /// PENDIENTE
-  /// CONFIRMADA
-  /// CANCELADA
-  ///
-  /// El backend se encarga de aplicar los permisos:
-  /// ADMIN -> puede consultar reservas de todos.
-  /// CLIENTE -> solamente sus propias reservas.
   static Future<List<Reservation>> getReservations(
     String token, {
     String? cliente,
@@ -480,12 +466,6 @@ class ApiService {
   // ELIMINAR RESERVA
   // =========================================================
 
-  /// Elimina una reserva mediante:
-  ///
-  /// DELETE /api/reservas/:id
-  ///
-  /// El backend debe verificar que solamente
-  /// el ADMIN pueda utilizar esta operación.
   static Future<void> deleteReservation({
     required String token,
     required int id,

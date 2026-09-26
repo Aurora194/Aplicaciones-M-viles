@@ -156,8 +156,6 @@ class _ReservationListPageState extends State<ReservationListPage> {
         currentPage = requestedPage;
         reservations = ordered;
 
-        // Si llegaron 15 registros, puede existir otra página.
-        // Si llegaron menos de 15, esta es la última página.
         hasNextPage = ordered.length == pageSize;
 
         state = ordered.isEmpty
@@ -297,11 +295,14 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-          const _NewReservationButton(),
+
+          if (isAdmin) ...[const _NewReservationButton()],
+
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
           ],
+
           const SizedBox(height: 70),
           const Icon(
             Icons.event_busy_outlined,
@@ -361,11 +362,14 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-          const _NewReservationButton(),
+
+          if (isAdmin) ...[const _NewReservationButton()],
+
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
           ],
+
           const SizedBox(height: 20),
           _ReservationFilter(value: selectedFilter, onChanged: _changeFilter),
           const SizedBox(height: 18),
@@ -601,6 +605,8 @@ class _ReservationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ecuadorDate = utcToEcuador(item.date);
+
     final statusColor = item.status == 'CONFIRMADA'
         ? AppColors.success
         : item.status == 'CANCELADA'
@@ -679,12 +685,12 @@ class _ReservationCard extends StatelessWidget {
                   _ReservationMeta(
                     icon: Icons.calendar_today_outlined,
                     text:
-                        '${item.date.day} ${_month(item.date.month)} ${item.date.year}',
+                        '${ecuadorDate.day} ${_month(ecuadorDate.month)} ${ecuadorDate.year}',
                   ),
                   _ReservationMeta(
                     icon: Icons.access_time_outlined,
                     text:
-                        '${item.date.hour.toString().padLeft(2, '0')}:${item.date.minute.toString().padLeft(2, '0')}',
+                        '${ecuadorDate.hour.toString().padLeft(2, '0')}:${ecuadorDate.minute.toString().padLeft(2, '0')}',
                   ),
                   _ReservationMeta(
                     icon: Icons.people_alt_outlined,
@@ -1008,12 +1014,10 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                               tableId: item.tableId,
                             );
 
-                            // Cancelar recordatorio anterior.
                             await NotificationService.cancelReservationReminder(
                               item.id,
                             );
 
-                            // Programar nuevo recordatorio.
                             await NotificationService.requestPermission();
 
                             await NotificationService.scheduleReservationReminder(
@@ -1109,7 +1113,6 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
 
       await ApiService.deleteReservation(token: token, id: item.id);
 
-      // Cancelar todas las notificaciones asociadas.
       await NotificationService.cancelReservationNotification(item.id);
 
       if (!mounted) return;
@@ -1802,8 +1805,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
       // --------------------------------------------------------
       // 3. Mostrar inmediatamente "Reserva creada".
-      //
-      // Se utiliza el ID REAL devuelto por el backend.
       // --------------------------------------------------------
 
       await NotificationService.showReservationCreated(
@@ -1812,8 +1813,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
       // --------------------------------------------------------
       // 4. Programar recordatorio 30 minutos antes.
-      //
-      // La fecha se envía como hora local de Ecuador.
       // --------------------------------------------------------
 
       await NotificationService.scheduleReservationReminder(
@@ -2230,7 +2229,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
             ),
             const SizedBox(height: 22),
 
-            // PERSONAS
             TextFormField(
               controller: _peopleController,
               keyboardType: TextInputType.number,
@@ -2277,7 +2275,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
             const SizedBox(height: 16),
 
-            // FECHA Y HORA
             Row(
               children: [
                 Expanded(
@@ -2317,7 +2314,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
             const SizedBox(height: 20),
 
-            // RESUMEN
             SizedBox(
               height: 44,
               child: OutlinedButton.icon(
@@ -2329,7 +2325,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
             const SizedBox(height: 10),
 
-            // CREAR
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
