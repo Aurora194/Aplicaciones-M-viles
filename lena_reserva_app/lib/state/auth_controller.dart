@@ -155,6 +155,26 @@ class AuthController extends ChangeNotifier {
     debugPrint('========================================');
   }
 
+  /// Configura una sesión únicamente para pruebas automatizadas.
+  /// No utiliza SharedPreferences.
+  void setTestSession({
+    required String token,
+    required int userId,
+    String? refreshToken,
+  }) {
+    _accessToken = token.trim();
+    _refreshToken = refreshToken?.trim();
+    _email = 'test@example.com';
+    _role = 'CLIENTE';
+    _userId = userId;
+    _name = 'Usuario';
+    _lastName = 'Prueba';
+    _isReady = true;
+    _restoreError = null;
+
+    notifyListeners();
+  }
+
   // ============================================================
   // RESTAURAR SESIÓN
   // ============================================================

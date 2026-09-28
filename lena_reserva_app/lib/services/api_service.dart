@@ -71,28 +71,35 @@ class AIAvailability {
 
 class ApiService {
   // =========================================================
+  // CLIENTE HTTP INYECTABLE PARA PRUEBAS
+  // =========================================================
+
+  static http.Client _client = http.Client();
+
+  static http.Client get client => _client;
+
+  static set client(http.Client value) {
+    _client = value;
+  }
+
+  static void resetClient() {
+    _client = http.Client();
+  }
+
+  // =========================================================
   // DIRECCIONES DEL BACKEND
   // =========================================================
 
-  /// Emulador Android.
-  /// 10.0.2.2 apunta al localhost de la computadora.
   static const String emulatorBaseUrl = 'http://10.0.2.2:3000';
 
-  /// Teléfono físico conectado a la misma red que la PC.
   static const String physicalDeviceBaseUrl = 'http://192.168.1.3:3000';
 
-  /// Permite sobrescribir la URL usando:
-  ///
-  /// flutter run
-  /// --dart-define=API_BASE_URL=http://192.168.1.3:3000
   static const String configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
   );
 
-  /// URL que utilizará la aplicación.
   static String get baseUrl {
-    // Si se especifica API_BASE_URL, tiene prioridad.
     if (configuredBaseUrl.isNotEmpty) {
       return configuredBaseUrl;
     }
@@ -101,7 +108,6 @@ class ApiService {
       return physicalDeviceBaseUrl;
     }
 
-    // Android Emulator.
     if (Platform.isAndroid) {
       return emulatorBaseUrl;
     }
@@ -125,6 +131,65 @@ class ApiService {
     };
   }
 
+  static Map<String, String> _jsonHeaders() {
+    return {'Content-Type': 'application/json', 'Accept': 'application/json'};
+  }
+
+  // =========================================================
+  // RENOVACIÓN DEL ACCESS TOKEN
+  // =========================================================
+
+  /// Solicita un nuevo accessToken utilizando el refreshToken.
+  ///
+  /// Endpoint del backend:
+  /// POST /api/auth/refresh
+  ///
+  /// Respuesta esperada:
+  /// {
+  ///   "success": true,
+  ///   "accessToken": "..."
+  /// }
+  static Future<String> refreshAccessToken(String refreshToken) async {
+    final cleanRefreshToken = refreshToken.trim();
+
+    if (cleanRefreshToken.isEmpty) {
+      throw const ApiException(401, 'Refresh Token requerido.');
+    }
+
+    final url = '$baseUrl/api/auth/refresh';
+
+    debugPrint('========================================');
+    debugPrint('RENOVACIÓN DE ACCESS TOKEN');
+    debugPrint('URL: $url');
+    debugPrint('Refresh Token enviado: true');
+    debugPrint('========================================');
+
+    final response = await _client
+        .post(
+          Uri.parse(url),
+          headers: _jsonHeaders(),
+          body: jsonEncode({'refreshToken': cleanRefreshToken}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    debugPrint('REFRESH STATUS: ${response.statusCode}');
+
+    final body = _decode(response);
+
+    final accessToken = body['accessToken']?.toString().trim();
+
+    if (accessToken == null || accessToken.isEmpty || accessToken == 'null') {
+      throw ApiException(
+        response.statusCode,
+        'El servidor no devolvió un nuevo token de acceso.',
+      );
+    }
+
+    debugPrint('Nuevo Access Token recibido: true');
+
+    return accessToken;
+  }
+
   // =========================================================
   // HEALTH
   // =========================================================
@@ -137,7 +202,7 @@ class ApiService {
     print('URL: $url');
     print('========================================');
 
-    final response = await http
+    final response = await _client
         .get(Uri.parse(url))
         .timeout(const Duration(seconds: 10));
 
@@ -160,13 +225,10 @@ class ApiService {
     print('Correo: $correo');
     print('========================================');
 
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: _jsonHeaders(),
           body: jsonEncode({'correo': correo, 'password': password}),
         )
         .timeout(const Duration(seconds: 10));
@@ -178,13 +240,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> forgotPassword(String correo) async {
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/auth/forgot-password'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: _jsonHeaders(),
           body: jsonEncode({'correo': correo.trim()}),
         )
         .timeout(const Duration(seconds: 15));
@@ -199,11 +258,6 @@ class ApiService {
       '${response.body}',
     );
 
-    print(
-      'FORGOT PASSWORD HEADERS: '
-      '${response.headers}',
-    );
-
     return _decode(response);
   }
 
@@ -212,13 +266,10 @@ class ApiService {
     required String codigo,
     required String nuevaPassword,
   }) async {
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/auth/reset-password'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: _jsonHeaders(),
           body: jsonEncode({
             'correo': correo.trim(),
             'codigo': codigo.trim(),
@@ -237,13 +288,10 @@ class ApiService {
     required String telefono,
     required String password,
   }) async {
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/auth/register'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: _jsonHeaders(),
           body: jsonEncode({
             'nombre': nombre,
             'apellido': apellido,
@@ -299,7 +347,7 @@ class ApiService {
       '$baseUrl/api/reservas',
     ).replace(queryParameters: queryParameters);
 
-    final response = await http
+    final response = await _client
         .get(uri, headers: _authorizationHeaders(token))
         .timeout(const Duration(seconds: 10));
 
@@ -325,7 +373,7 @@ class ApiService {
   // =========================================================
 
   static Future<Reservation> getReservation(String token, int id) async {
-    final response = await http
+    final response = await _client
         .get(
           Uri.parse('$baseUrl/api/reservas/$id'),
           headers: _authorizationHeaders(token),
@@ -356,19 +404,103 @@ class ApiService {
     required int people,
     required int userId,
     required int tableId,
+
+    /// Refresh token opcional.
+    ///
+    /// Si el servidor responde 401 y se proporciona este token,
+    /// se intenta renovar automáticamente el accessToken.
+    String? refreshToken,
+
+    /// Callback opcional para guardar el nuevo accessToken.
+    ///
+    /// En producción se puede conectar con:
+    ///
+    /// auth.updateAccessToken
+    Future<void> Function(String newAccessToken)? onTokenRefreshed,
   }) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/api/reservas'),
-          headers: _jsonAuthorizationHeaders(token),
-          body: jsonEncode({
-            'fecha': date.toUtc().toIso8601String(),
-            'personas': people,
-            'usuarioId': userId,
-            'mesaId': tableId,
-          }),
-        )
+    final uri = Uri.parse('$baseUrl/api/reservas');
+
+    final requestBody = jsonEncode({
+      'fecha': date.toUtc().toIso8601String(),
+      'personas': people,
+      'usuarioId': userId,
+      'mesaId': tableId,
+    });
+
+    // ========================================================
+    // PRIMER INTENTO
+    // ========================================================
+
+    debugPrint('========================================');
+    debugPrint('CREAR RESERVA');
+    debugPrint('URL: $uri');
+    debugPrint('Primer intento');
+    debugPrint('========================================');
+
+    var response = await _client
+        .post(uri, headers: _jsonAuthorizationHeaders(token), body: requestBody)
         .timeout(const Duration(seconds: 10));
+
+    // ========================================================
+    // HTTP 401
+    // ========================================================
+
+    if (response.statusCode == 401) {
+      debugPrint('========================================');
+      debugPrint('HTTP 401 DETECTADO');
+      debugPrint('Access Token inválido o expirado.');
+      debugPrint('========================================');
+
+      // ------------------------------------------------------
+      // No existe refresh token
+      // ------------------------------------------------------
+
+      if (refreshToken == null || refreshToken.trim().isEmpty) {
+        return _decode(response).let<Reservation>(
+          (_) => throw const ApiException(401, 'Token inválido o expirado.'),
+        );
+      }
+
+      // ------------------------------------------------------
+      // Intentar renovar token
+      // ------------------------------------------------------
+
+      final newAccessToken = await refreshAccessToken(refreshToken);
+
+      // ------------------------------------------------------
+      // Guardar nuevo token si existe callback
+      // ------------------------------------------------------
+
+      if (onTokenRefreshed != null) {
+        await onTokenRefreshed(newAccessToken);
+      }
+
+      debugPrint('========================================');
+      debugPrint('TOKEN RENOVADO');
+      debugPrint('Reintentando crear la reserva...');
+      debugPrint('========================================');
+
+      // ------------------------------------------------------
+      // SEGUNDO INTENTO
+      // ------------------------------------------------------
+
+      response = await _client
+          .post(
+            uri,
+            headers: _jsonAuthorizationHeaders(newAccessToken),
+            body: requestBody,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint(
+        'REINTENTO RESERVA STATUS: '
+        '${response.statusCode}',
+      );
+    }
+
+    // ========================================================
+    // DECODIFICAR RESPUESTA
+    // ========================================================
 
     final body = _decode(response);
 
@@ -396,7 +528,7 @@ class ApiService {
     required int userId,
     required int tableId,
   }) async {
-    final response = await http
+    final response = await _client
         .put(
           Uri.parse('$baseUrl/api/reservas/$id'),
           headers: _jsonAuthorizationHeaders(token),
@@ -440,7 +572,7 @@ class ApiService {
       throw const ApiException(422, 'Estado de reserva inválido.');
     }
 
-    final response = await http
+    final response = await _client
         .put(
           Uri.parse('$baseUrl/api/reservas/$id'),
           headers: _jsonAuthorizationHeaders(token),
@@ -470,7 +602,7 @@ class ApiService {
     required String token,
     required int id,
   }) async {
-    final response = await http
+    final response = await _client
         .delete(
           Uri.parse('$baseUrl/api/reservas/$id'),
           headers: _authorizationHeaders(token),
@@ -501,7 +633,7 @@ class ApiService {
       '$finalUri',
     );
 
-    final response = await http
+    final response = await _client
         .get(
           finalUri,
           headers: {
@@ -538,7 +670,7 @@ class ApiService {
   // =========================================================
 
   static Future<List<Map<String, dynamic>>> getTables(String token) async {
-    final response = await http
+    final response = await _client
         .get(
           Uri.parse('$baseUrl/api/mesas?limit=100&order=asc'),
           headers: _authorizationHeaders(token),
@@ -571,7 +703,7 @@ class ApiService {
       );
     }
 
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/mesas'),
           headers: _jsonAuthorizationHeaders(token),
@@ -617,7 +749,7 @@ class ApiService {
       );
     }
 
-    final response = await http
+    final response = await _client
         .put(
           Uri.parse('$baseUrl/api/mesas/$id'),
           headers: _jsonAuthorizationHeaders(token),
@@ -651,7 +783,7 @@ class ApiService {
     required String token,
     required int id,
   }) async {
-    final response = await http
+    final response = await _client
         .delete(
           Uri.parse('$baseUrl/api/mesas/$id'),
           headers: _authorizationHeaders(token),
@@ -666,7 +798,7 @@ class ApiService {
   // =========================================================
 
   static Future<List<Map<String, dynamic>>> getUsers(String token) async {
-    final response = await http
+    final response = await _client
         .get(
           Uri.parse('$baseUrl/api/users'),
           headers: _authorizationHeaders(token),
@@ -688,7 +820,7 @@ class ApiService {
     required String token,
     required String message,
   }) async {
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/ai/chat'),
           headers: {
@@ -701,13 +833,6 @@ class ApiService {
         .timeout(const Duration(seconds: 30));
 
     final body = _decode(response);
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        response.statusCode,
-        body['message']?.toString() ?? 'No se pudo comunicar con la IA.',
-      );
-    }
 
     Map<String, dynamic>? draft;
 
@@ -786,5 +911,15 @@ class ApiService {
     }
 
     return body;
+  }
+}
+
+// =========================================================
+// EXTENSIÓN AUXILIAR
+// =========================================================
+
+extension _LetExtension<T> on T {
+  R let<R>(R Function(T value) function) {
+    return function(this);
   }
 }

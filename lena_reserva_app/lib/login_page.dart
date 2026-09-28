@@ -33,6 +33,9 @@ class _LoginPageState extends State<LoginPage> {
   // DETECCIÓN FÍSICO / EMULADOR
   // ============================================================
 
+  bool _isPhysicalDevice = false;
+  bool _deviceDetected = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,50 +65,56 @@ class _LoginPageState extends State<LoginPage> {
       final deviceInfo = DeviceInfoPlugin();
 
       bool isPhysicalDevice = true;
-      String deviceType = 'DISPOSITIVO FÍSICO';
 
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfo.androidInfo;
 
         isPhysicalDevice = androidInfo.isPhysicalDevice;
-        deviceType = isPhysicalDevice ? 'TELÉFONO FÍSICO' : 'EMULADOR ANDROID';
 
         debugPrint('========================================');
         debugPrint('DETECCIÓN DEL DISPOSITIVO');
         debugPrint('Modelo: ${androidInfo.model}');
         debugPrint('Fabricante: ${androidInfo.manufacturer}');
         debugPrint('Es físico: $isPhysicalDevice');
-        debugPrint('Tipo: $deviceType');
+        debugPrint(
+          'Tipo: ${isPhysicalDevice ? 'TELÉFONO FÍSICO' : 'EMULADOR ANDROID'}',
+        );
         debugPrint('========================================');
       } else if (Platform.isIOS) {
         final iosInfo = await deviceInfo.iosInfo;
 
         isPhysicalDevice = iosInfo.isPhysicalDevice;
-        deviceType = isPhysicalDevice ? 'IPHONE/IPAD FÍSICO' : 'SIMULADOR IOS';
 
         debugPrint('========================================');
         debugPrint('DETECCIÓN DEL DISPOSITIVO');
         debugPrint('Modelo: ${iosInfo.model}');
         debugPrint('Nombre: ${iosInfo.name}');
         debugPrint('Es físico: $isPhysicalDevice');
-        debugPrint('Tipo: $deviceType');
+        debugPrint(
+          'Tipo: ${isPhysicalDevice ? 'IPHONE/IPAD FÍSICO' : 'SIMULADOR IOS'}',
+        );
         debugPrint('========================================');
       } else {
         debugPrint('Plataforma no móvil: ${Platform.operatingSystem}');
       }
 
+      if (!mounted) return;
+
+      setState(() {
+        _isPhysicalDevice = isPhysicalDevice;
+        _deviceDetected = true;
+      });
+
       // ==========================================================
-      // IMPORTANTE
+      // SOLO DISPOSITIVO FÍSICO
       // ==========================================================
       //
-      // SOLO en un dispositivo físico se quita el foco
-      // automáticamente.
+      // En un teléfono físico evitamos que algún campo quede
+      // enfocado automáticamente al entrar al Login.
       //
-      // En el emulador NO se ejecuta unfocus().
-      // De esta manera Flutter/Android mantiene el comportamiento
-      // normal del teclado del emulador.
+      // En el emulador NO hacemos unfocus().
       //
-      if (isPhysicalDevice && mounted) {
+      if (isPhysicalDevice) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
 
@@ -114,6 +123,15 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       debugPrint('No se pudo detectar el dispositivo: $e');
+
+      if (!mounted) return;
+
+      // Si no se pudo detectar, mantenemos el comportamiento
+      // conservador del dispositivo físico.
+      setState(() {
+        _isPhysicalDevice = true;
+        _deviceDetected = true;
+      });
     }
   }
 
@@ -398,11 +416,30 @@ class _LoginPageState extends State<LoginPage> {
 
     final keyboardHeight = mediaQuery.viewInsets.bottom;
 
-    final keyboardVisible = keyboardHeight > 0;
+    // ==========================================================
+    // IMPORTANTE
+    // ==========================================================
+    //
+    // En el dispositivo físico:
+    //   keyboardVisible = true cuando aparece el teclado.
+    //
+    // En el emulador:
+    //   keyboardVisible SIEMPRE será false.
+    //
+    // Por eso la tarjeta no cambia de posición ni tamaño
+    // cuando aparece el teclado del emulador.
+    //
+    final keyboardVisible =
+        _isPhysicalDevice && _deviceDetected && keyboardHeight > 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F5F4),
-      resizeToAvoidBottomInset: true,
+
+      // ========================================================
+      // FÍSICO = adaptar pantalla al teclado
+      // EMULADOR = mantener pantalla fija
+      // ========================================================
+      resizeToAvoidBottomInset: _isPhysicalDevice,
 
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -440,22 +477,31 @@ class _LoginPageState extends State<LoginPage> {
 
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+
               padding: EdgeInsets.only(
                 left: 18,
                 right: 18,
+
+                // ==================================================
+                // En el emulador siempre usa el diseño normal.
+                // ==================================================
                 top: keyboardVisible ? 8 : 20,
                 bottom: keyboardVisible ? 12 : 24,
               ),
+
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   minHeight: availableHeight - (keyboardVisible ? 20 : 44),
                 ),
+
                 child: Align(
                   alignment: keyboardVisible
                       ? Alignment.topCenter
                       : Alignment.center,
+
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 430),
+
                     child: _buildLoginCard(keyboardVisible),
                   ),
                 ),
@@ -474,10 +520,15 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLoginCard(bool keyboardVisible) {
     return Card(
       margin: EdgeInsets.zero,
+
       elevation: keyboardVisible ? 5 : 9,
+
       shadowColor: Colors.black.withValues(alpha: 0.14),
+
       color: Colors.white,
+
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           24,
@@ -485,18 +536,23 @@ class _LoginPageState extends State<LoginPage> {
           24,
           keyboardVisible ? 18 : 26,
         ),
+
         child: Form(
           key: formKey,
+
           child: Column(
             mainAxisSize: MainAxisSize.min,
+
             children: [
               Container(
                 width: keyboardVisible ? 56 : 72,
                 height: keyboardVisible ? 56 : 72,
+
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
+
                 child: Icon(
                   Icons.restaurant_rounded,
                   color: AppColors.primary,
@@ -509,6 +565,7 @@ class _LoginPageState extends State<LoginPage> {
               const Text(
                 'Leña Reserva App',
                 textAlign: TextAlign.center,
+
                 style: TextStyle(
                   color: Color(0xFF4F4F4F),
                   fontSize: 24,
@@ -522,20 +579,29 @@ class _LoginPageState extends State<LoginPage> {
               const Text(
                 'Inicia sesión para continuar',
                 textAlign: TextAlign.center,
+
                 style: TextStyle(color: Color(0xFF888888), fontSize: 12.5),
               ),
 
               SizedBox(height: keyboardVisible ? 13 : 22),
 
+              // ==================================================
+              // CORREO
+              // ==================================================
               TextFormField(
                 controller: emailController,
+
                 keyboardType: TextInputType.emailAddress,
+
                 textInputAction: TextInputAction.next,
+
                 enabled: !loading,
+
                 autofillHints: const [
                   AutofillHints.username,
                   AutofillHints.email,
                 ],
+
                 onChanged: (_) {
                   if (error != null) {
                     setState(() {
@@ -543,27 +609,38 @@ class _LoginPageState extends State<LoginPage> {
                     });
                   }
                 },
+
                 decoration: _inputDecoration(
                   label: 'Correo electrónico',
                   hint: 'ejemplo@correo.com',
                   icon: Icons.person_outline_rounded,
                 ),
+
                 validator: _validateEmail,
               ),
 
               SizedBox(height: keyboardVisible ? 10 : 14),
 
+              // ==================================================
+              // CONTRASEÑA
+              // ==================================================
               TextFormField(
                 controller: passwordController,
+
                 enabled: !loading,
+
                 obscureText: obscurePassword,
+
                 textInputAction: TextInputAction.done,
+
                 autofillHints: const [AutofillHints.password],
+
                 onFieldSubmitted: (_) {
                   if (!loading) {
                     submit();
                   }
                 },
+
                 onChanged: (_) {
                   if (error != null) {
                     setState(() {
@@ -571,14 +648,17 @@ class _LoginPageState extends State<LoginPage> {
                     });
                   }
                 },
+
                 decoration: _inputDecoration(
                   label: 'Contraseña',
                   hint: 'Ingrese su contraseña',
                   icon: Icons.lock_outline_rounded,
+
                   suffixIcon: IconButton(
                     tooltip: obscurePassword
                         ? 'Mostrar contraseña'
                         : 'Ocultar contraseña',
+
                     onPressed: loading
                         ? null
                         : () {
@@ -586,6 +666,7 @@ class _LoginPageState extends State<LoginPage> {
                               obscurePassword = !obscurePassword;
                             });
                           },
+
                     icon: Icon(
                       obscurePassword
                           ? Icons.visibility_outlined
@@ -593,34 +674,48 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
+
                 validator: _validatePassword,
               ),
 
+              // ==================================================
+              // ERROR
+              // ==================================================
               if (error != null) ...[
                 const SizedBox(height: 10),
+
                 Container(
                   width: double.infinity,
+
                   padding: const EdgeInsets.symmetric(
                     horizontal: 11,
                     vertical: 9,
                   ),
+
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFF1F2),
+
                     borderRadius: BorderRadius.circular(10),
+
                     border: Border.all(color: const Color(0xFFF4C5CA)),
                   ),
+
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
+
                     children: [
                       const Icon(
                         Icons.error_outline_rounded,
                         color: Color(0xFFB42318),
                         size: 19,
                       ),
+
                       const SizedBox(width: 8),
+
                       Expanded(
                         child: Text(
                           error!,
+
                           style: const TextStyle(
                             color: Color(0xFFB42318),
                             fontSize: 12,
@@ -636,27 +731,40 @@ class _LoginPageState extends State<LoginPage> {
 
               SizedBox(height: keyboardVisible ? 11 : 20),
 
+              // ==================================================
+              // BOTÓN INGRESAR
+              // ==================================================
               SizedBox(
                 width: double.infinity,
+
                 height: keyboardVisible ? 46 : 50,
+
                 child: ElevatedButton(
                   onPressed: loading ? null : submit,
+
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
+
                     foregroundColor: Colors.white,
+
                     disabledBackgroundColor: AppColors.primary.withValues(
                       alpha: 0.55,
                     ),
+
                     disabledForegroundColor: Colors.white,
+
                     elevation: 0,
+
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(11),
                     ),
                   ),
+
                   child: loading
                       ? const SizedBox(
                           width: 21,
                           height: 21,
+
                           child: CircularProgressIndicator(
                             strokeWidth: 2.3,
                             color: Colors.white,
@@ -664,11 +772,15 @@ class _LoginPageState extends State<LoginPage> {
                         )
                       : const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
+
                           children: [
                             Icon(Icons.login_rounded, size: 20),
+
                             SizedBox(width: 8),
+
                             Text(
                               'Ingresar',
+
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -681,58 +793,80 @@ class _LoginPageState extends State<LoginPage> {
 
               SizedBox(height: keyboardVisible ? 3 : 7),
 
+              // ==================================================
+              // OLVIDÉ CONTRASEÑA
+              // ==================================================
               TextButton(
                 onPressed: loading
                     ? null
                     : () {
                         Navigator.push(
                           context,
+
                           MaterialPageRoute(
                             builder: (_) => const ForgotPasswordPage(),
                           ),
                         );
                       },
+
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.primary,
+
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 5,
                   ),
+
                   minimumSize: Size.zero,
+
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
+
                 child: const Text(
                   '¿Olvidaste tu contraseña?',
+
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
 
               const SizedBox(height: 1),
 
+              // ==================================================
+              // REGISTRO
+              // ==================================================
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+
                 children: [
                   const Text(
                     '¿No tienes una cuenta?',
+
                     style: TextStyle(color: Color(0xFF777777), fontSize: 12),
                   ),
+
                   TextButton(
                     onPressed: loading
                         ? null
                         : () {
                             Navigator.pushNamed(context, '/registro');
                           },
+
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
+
                       padding: const EdgeInsets.symmetric(
                         horizontal: 5,
                         vertical: 3,
                       ),
+
                       minimumSize: Size.zero,
+
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
+
                     child: const Text(
                       'Crear cuenta',
+
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -761,30 +895,45 @@ class _LoginPageState extends State<LoginPage> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
+
       prefixIcon: Icon(icon),
+
       suffixIcon: suffixIcon,
+
       filled: true,
+
       fillColor: const Color(0xFFFBFBFB),
+
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
+
         borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
       ),
+
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
+
         borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
       ),
+
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
+
         borderSide: BorderSide(color: AppColors.primary, width: 1.7),
       ),
+
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
+
         borderSide: const BorderSide(color: Colors.red),
       ),
+
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(11),
+
         borderSide: const BorderSide(color: Colors.red, width: 1.5),
       ),
+
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     );
   }
@@ -809,22 +958,32 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
+
       child: TextButton(
         onPressed: onPressed,
+
         style: TextButton.styleFrom(
           foregroundColor: active
               ? Colors.black87
               : Theme.of(context).colorScheme.primary,
+
           backgroundColor: active ? Colors.black12 : Colors.transparent,
+
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+
           minimumSize: Size.zero,
+
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+
           textStyle: TextStyle(
             fontSize: 14,
+
             fontWeight: active ? FontWeight.bold : FontWeight.w600,
           ),
+
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
+
         child: Text(label),
       ),
     );

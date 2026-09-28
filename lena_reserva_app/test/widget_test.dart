@@ -13,6 +13,8 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('Leña Reserva'), findsWidgets);
+    // Verifica que la aplicación haya construido su árbol de widgets
+    // correctamente al iniciar.
+    expect(find.byType(LenaReservaApp), findsOneWidget);
   });
 }

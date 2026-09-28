@@ -295,14 +295,11 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-
           if (isAdmin) ...[const _NewReservationButton()],
-
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
           ],
-
           const SizedBox(height: 70),
           const Icon(
             Icons.event_busy_outlined,
@@ -362,14 +359,11 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-
           if (isAdmin) ...[const _NewReservationButton()],
-
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
           ],
-
           const SizedBox(height: 20),
           _ReservationFilter(value: selectedFilter, onChanged: _changeFilter),
           const SizedBox(height: 18),
@@ -1301,8 +1295,57 @@ class _DetailRow extends StatelessWidget {
 // NUEVA RESERVA
 // ============================================================
 
+// ============================================================
+// INYECCIÓN OPCIONAL PARA PRUEBAS
+// ============================================================
+//
+// IMPORTANTE:
+//
+// Estas funciones son OPCIONALES.
+//
+// En Android/producción:
+//
+// CreateReservationPage()
+//
+// continúa utilizando NotificationService normalmente.
+//
+// En el test:
+//
+// CreateReservationPage(
+//   requestNotificationPermission: ...,
+//   showReservationCreated: ...,
+//   scheduleReservationReminder: ...,
+// )
+//
+// utiliza funciones simuladas y no toca el plugin nativo.
+//
+// ============================================================
+
+typedef RequestNotificationPermission = Future<bool> Function();
+
+typedef ShowReservationCreated =
+    Future<void> Function({required int reservationId});
+
+typedef ScheduleReservationReminder =
+    Future<void> Function({
+      required int reservationId,
+      required DateTime reservationDateTime,
+      required int minutesBefore,
+    });
+
 class CreateReservationPage extends StatefulWidget {
-  const CreateReservationPage({super.key});
+  const CreateReservationPage({
+    super.key,
+    this.requestNotificationPermission,
+    this.showReservationCreated,
+    this.scheduleReservationReminder,
+  });
+
+  final RequestNotificationPermission? requestNotificationPermission;
+
+  final ShowReservationCreated? showReservationCreated;
+
+  final ScheduleReservationReminder? scheduleReservationReminder;
 
   static String? draftPeople;
   static DateTime? draftDate;
@@ -1320,6 +1363,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
   final _peopleController = TextEditingController();
 
   DateTime? selectedDate;
+
   TimeOfDay? selectedTime;
 
   List<Map<String, dynamic>> tables = [];
@@ -1327,6 +1371,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
   int? selectedTableId;
 
   bool loadingTables = false;
+
   bool saving = false;
 
   String? errorMessage;
@@ -1348,13 +1393,17 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     _peopleController.text = draftPeople ?? '';
 
     selectedDate = draftDate;
+
     selectedTime = draftTime;
 
     selectedTableId = null;
 
     CreateReservationPage.draftPeople = null;
+
     CreateReservationPage.draftDate = null;
+
     CreateReservationPage.draftTime = null;
+
     CreateReservationPage.draftTableId = null;
 
     if (selectedDate != null && selectedTime != null) {
@@ -1387,6 +1436,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
     try {
       final auth = AuthScope.of(context);
+
       final token = auth.accessToken;
 
       if (token == null || token.isEmpty) {
@@ -1472,6 +1522,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
   @override
   void dispose() {
     _peopleController.dispose();
+
     super.dispose();
   }
 
@@ -1495,6 +1546,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       selectedDate = DateTime(picked.year, picked.month, picked.day);
 
       selectedTableId = null;
+
       errorMessage = null;
     });
 
@@ -1515,7 +1567,9 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
     setState(() {
       selectedTime = picked;
+
       selectedTableId = null;
+
       errorMessage = null;
     });
 
@@ -1532,6 +1586,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
   String _formatDateDisplay(DateTime date) {
     final today = ecuadorToday();
+
     final tomorrow = today.add(const Duration(days: 1));
 
     if (_sameDate(date, today)) {
@@ -1609,6 +1664,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
     setState(() {
       selectedTableId = id;
+
       errorMessage = null;
     });
   }
@@ -1754,6 +1810,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     }
 
     final auth = AuthScope.of(context);
+
     final token = auth.accessToken;
 
     if (token == null || token.isEmpty) {
@@ -1783,17 +1840,40 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     });
 
     try {
-      // --------------------------------------------------------
-      // 1. Pedir permiso correctamente.
-      // --------------------------------------------------------
+      // ========================================================
+      // NOTIFICACIONES
+      // ========================================================
+      //
+      // Si el test proporciona una función, se usa esa función.
+      //
+      // Si NO proporciona una función, se utiliza
+      // NotificationService normalmente.
+      //
+      // Por tanto, Android no cambia.
+      // ========================================================
 
-      final permission = await NotificationService.requestPermission();
+      final requestPermission =
+          widget.requestNotificationPermission ??
+          NotificationService.requestPermission;
 
-      debugPrint('PERMISO NOTIFICACIONES: $permission');
+      final showReservationCreated =
+          widget.showReservationCreated ??
+          NotificationService.showReservationCreated;
 
-      // --------------------------------------------------------
-      // 2. Crear reserva.
-      // --------------------------------------------------------
+      final scheduleReservationReminder =
+          widget.scheduleReservationReminder ??
+          NotificationService.scheduleReservationReminder;
+
+      final permission = await requestPermission();
+
+      debugPrint(
+        'PERMISO NOTIFICACIONES: '
+        '$permission',
+      );
+
+      // ========================================================
+      // CREAR RESERVA
+      // ========================================================
 
       final reservation = await ApiService.createReservation(
         token: token,
@@ -1803,19 +1883,17 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         tableId: selectedTableId!,
       );
 
-      // --------------------------------------------------------
-      // 3. Mostrar inmediatamente "Reserva creada".
-      // --------------------------------------------------------
+      // ========================================================
+      // NOTIFICACIÓN: RESERVA CREADA
+      // ========================================================
 
-      await NotificationService.showReservationCreated(
-        reservationId: reservation.id,
-      );
+      await showReservationCreated(reservationId: reservation.id);
 
-      // --------------------------------------------------------
-      // 4. Programar recordatorio 30 minutos antes.
-      // --------------------------------------------------------
+      // ========================================================
+      // NOTIFICACIÓN: RECORDATORIO
+      // ========================================================
 
-      await NotificationService.scheduleReservationReminder(
+      await scheduleReservationReminder(
         reservationId: reservation.id,
         reservationDateTime: ecuadorDateTime,
         minutesBefore: 30,
@@ -1824,8 +1902,11 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       if (!mounted) return;
 
       CreateReservationPage.draftPeople = null;
+
       CreateReservationPage.draftDate = null;
+
       CreateReservationPage.draftTime = null;
+
       CreateReservationPage.draftTableId = null;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2228,7 +2309,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 22),
-
             TextFormField(
               controller: _peopleController,
               keyboardType: TextInputType.number,
@@ -2272,9 +2352,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
                 return null;
               },
             ),
-
             const SizedBox(height: 16),
-
             Row(
               children: [
                 Expanded(
@@ -2298,11 +2376,8 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 22),
-
             _buildTablesSection(),
-
             if (errorMessage != null && tables.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
@@ -2311,9 +2386,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
                   style: const TextStyle(color: AppColors.error, fontSize: 12),
                 ),
               ),
-
             const SizedBox(height: 20),
-
             SizedBox(
               height: 44,
               child: OutlinedButton.icon(
@@ -2322,9 +2395,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
                 label: const Text('Ver resumen'),
               ),
             ),
-
             const SizedBox(height: 10),
-
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
