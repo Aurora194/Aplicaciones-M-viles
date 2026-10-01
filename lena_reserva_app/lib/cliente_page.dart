@@ -125,9 +125,7 @@ class _ClientePageState extends State<ClientePage> {
               content: Text('Foto de perfil guardada correctamente.'),
             ),
           );
-        } catch (e) {
-          debugPrint('CLIENTE - ERROR GUARDANDO FOTO: $e');
-
+        } catch (_) {
           await _showMessage(
             title: 'No se pudo guardar',
             message:
@@ -273,7 +271,6 @@ class _ClientePageState extends State<ClientePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F7F6),
-
       appBar: AppBar(
         title: const Text(
           'Cliente',
@@ -295,7 +292,6 @@ class _ClientePageState extends State<ClientePage> {
           ),
         ],
       ),
-
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
@@ -346,8 +342,6 @@ class _ClientePageState extends State<ClientePage> {
               description:
                   'Selecciona una fecha y hora para consultar las mesas disponibles.',
               onTap: () {
-                debugPrint('CLIENTE - SE PRESIONÓ CONSULTAR DISPONIBILIDAD');
-
                 _showAvailability(context);
               },
             ),
@@ -358,7 +352,6 @@ class _ClientePageState extends State<ClientePage> {
           ],
         ),
       ),
-
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'cliente_ai_fab',
         backgroundColor: AppColors.primary,
@@ -373,7 +366,6 @@ class _ClientePageState extends State<ClientePage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -466,7 +458,6 @@ class _WelcomeCard extends StatelessWidget {
                         ),
                 ),
               ),
-
               Positioned(
                 right: -4,
                 bottom: -4,
@@ -742,7 +733,8 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
     if (selectedDate == null || selectedTime == null) {
       setState(() {
         errorMessage =
-            'Selecciona una fecha y una hora para consultar la disponibilidad.';
+            'Selecciona una fecha y una hora para consultar '
+            'la disponibilidad.';
       });
 
       return;
@@ -771,13 +763,6 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
       selectedTime!.minute,
     );
 
-    debugPrint('========================================');
-    debugPrint('CLIENTE - CONSULTA DE DISPONIBILIDAD');
-    debugPrint('Fecha: ${_formatDate(selectedDate!)}');
-    debugPrint('Hora: ${_formatTime(selectedTime!)}');
-    debugPrint('DateTime: $dateTime');
-    debugPrint('========================================');
-
     setState(() {
       loading = true;
       errorMessage = null;
@@ -792,6 +777,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
        * Se comunica directamente con el backend de mesas
        * mediante ApiService.getAvailableTables().
        */
+
       final result = await ApiService.getAvailableTables(token, date: dateTime);
 
       if (!mounted) return;
@@ -821,9 +807,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
         loading = false;
         errorMessage = exception.message;
       });
-    } catch (error) {
-      debugPrint('CLIENTE - ERROR DISPONIBILIDAD: $error');
-
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -841,9 +825,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
-
     final month = date.month.toString().padLeft(2, '0');
-
     final year = date.year.toString();
 
     return '$day/$month/$year';
@@ -855,7 +837,6 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
   String _formatTime(TimeOfDay time) {
     final hour = time.hour.toString().padLeft(2, '0');
-
     final minute = time.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
@@ -900,7 +881,6 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
         'Consultar disponibilidad',
         style: TextStyle(fontWeight: FontWeight.w800),
       ),
-
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -965,9 +945,9 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
               if (!canSearch) ...[
                 const SizedBox(height: 8),
-
                 const Text(
-                  'Selecciona una fecha y una hora para consultar las mesas disponibles.',
+                  'Selecciona una fecha y una hora para consultar '
+                  'las mesas disponibles.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
@@ -1013,7 +993,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                   child: CircularProgressIndicator(),
                 )
               // ==================================================
-              // RESULTADOS
+              // RESULTADOS VACÍOS
               // ==================================================
               else if (canSearch && mesas.isEmpty)
                 const Padding(
@@ -1029,12 +1009,16 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                       SizedBox(height: 10),
 
                       Text(
-                        'No hay mesas disponibles para la fecha y hora seleccionadas.',
+                        'No hay mesas disponibles para la fecha '
+                        'y hora seleccionadas.',
                         textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 )
+              // ==================================================
+              // RESULTADOS
+              // ==================================================
               else if (mesas.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

@@ -102,15 +102,11 @@ class _MesasPageState extends State<MesasPage> {
         _error = 'No fue posible cargar las mesas.\n$error';
       });
     } finally {
-      if (!mounted) return;
-
-      if (requestActual == _requestId) {
-        if (_loading) {
-          setState(() {
-            _loading = false;
-            _cargandoInicial = false;
-          });
-        }
+      if (mounted && requestActual == _requestId && _loading) {
+        setState(() {
+          _loading = false;
+          _cargandoInicial = false;
+        });
       }
     }
   }
@@ -161,6 +157,10 @@ class _MesasPageState extends State<MesasPage> {
 
     if (confirmar != true) return;
 
+    // El diálogo es una operación asíncrona.
+    // Verificamos que el widget siga montado antes de usar context.
+    if (!mounted) return;
+
     final auth = AuthScope.of(context);
     final token = auth.accessToken;
 
@@ -206,7 +206,6 @@ class _MesasPageState extends State<MesasPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Gestionar mesas')),
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           _showTableDialog();
@@ -214,20 +213,15 @@ class _MesasPageState extends State<MesasPage> {
         icon: const Icon(Icons.add),
         label: const Text('Nueva mesa'),
       ),
-
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    // Primera carga sin datos.
     if (_cargandoInicial && _mesas.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Si existe error pero ya tenemos mesas,
-    // mostramos las mesas y no dejamos la pantalla
-    // atrapada en "Cargando".
     if (_error != null && _mesas.isNotEmpty) {
       return RefreshIndicator(
         onRefresh: _loadMesas,
@@ -313,9 +307,6 @@ class _MesasPageState extends State<MesasPage> {
             children: _buildMesaCards(),
           ),
         ),
-
-        // Indicador pequeño cuando se actualizan
-        // mesas que ya están visibles.
         if (_loading)
           const Positioned(
             top: 0,
@@ -330,9 +321,7 @@ class _MesasPageState extends State<MesasPage> {
   List<Widget> _buildMesaCards() {
     return _mesas.map((mesa) {
       final numero = mesa['numero']?.toString() ?? '-';
-
       final capacidad = mesa['capacidad']?.toString() ?? '-';
-
       final disponible = mesa['disponible'] == true;
 
       return Card(
@@ -346,18 +335,15 @@ class _MesasPageState extends State<MesasPage> {
               ),
             ),
           ),
-
           title: Text(
             'Mesa $numero',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-
           subtitle: Text(
             'Capacidad: $capacidad personas\n'
             'Estado: '
             '${disponible ? 'Disponible' : 'No disponible'}',
           ),
-
           trailing: PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'editar') {
@@ -371,7 +357,6 @@ class _MesasPageState extends State<MesasPage> {
               PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
             ],
           ),
-
           isThreeLine: true,
         ),
       );
@@ -431,7 +416,6 @@ class _MesaDialogState extends State<MesaDialog> {
     }
 
     final numero = _numeroController.text.trim();
-
     final capacidad = int.tryParse(_capacidadController.text.trim());
 
     if (capacidad == null || capacidad <= 0) {
@@ -502,7 +486,6 @@ class _MesaDialogState extends State<MesaDialog> {
 
     return AlertDialog(
       title: Text(editar ? 'Editar mesa' : 'Crear nueva mesa'),
-
       content: Form(
         key: _formKey,
         child: Column(
@@ -532,9 +515,7 @@ class _MesaDialogState extends State<MesaDialog> {
                 return null;
               },
             ),
-
             const SizedBox(height: 16),
-
             TextFormField(
               controller: _capacidadController,
               keyboardType: TextInputType.number,
@@ -554,9 +535,7 @@ class _MesaDialogState extends State<MesaDialog> {
                 return null;
               },
             ),
-
             const SizedBox(height: 8),
-
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Disponible'),
@@ -572,7 +551,6 @@ class _MesaDialogState extends State<MesaDialog> {
           ],
         ),
       ),
-
       actions: [
         TextButton(
           onPressed: _guardando
@@ -582,7 +560,6 @@ class _MesaDialogState extends State<MesaDialog> {
                 },
           child: const Text('Cancelar'),
         ),
-
         FilledButton(
           onPressed: _guardando ? null : _guardar,
           child: _guardando

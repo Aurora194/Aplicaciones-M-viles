@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'design/app_colors.dart';
@@ -112,7 +113,6 @@ class _ReservationListPageState extends State<ReservationListPage> {
 
       if (!auth.isAuthenticated) {
         Navigator.pushReplacementNamed(context, '/login');
-
         return;
       }
 
@@ -182,14 +182,18 @@ class _ReservationListPageState extends State<ReservationListPage> {
         errorMessage = error.message;
         changingPage = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
         state = ReservationLoadState.error;
-        errorMessage = 'Error al cargar las reservas: $error';
+        errorMessage = 'Error al cargar las reservas.';
         changingPage = false;
       });
+
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Error al cargar las reservas.');
+      }
     }
   }
 
@@ -1298,28 +1302,6 @@ class _DetailRow extends StatelessWidget {
 // ============================================================
 // INYECCIÓN OPCIONAL PARA PRUEBAS
 // ============================================================
-//
-// IMPORTANTE:
-//
-// Estas funciones son OPCIONALES.
-//
-// En Android/producción:
-//
-// CreateReservationPage()
-//
-// continúa utilizando NotificationService normalmente.
-//
-// En el test:
-//
-// CreateReservationPage(
-//   requestNotificationPermission: ...,
-//   showReservationCreated: ...,
-//   scheduleReservationReminder: ...,
-// )
-//
-// utiliza funciones simuladas y no toca el plugin nativo.
-//
-// ============================================================
 
 typedef RequestNotificationPermission = Future<bool> Function();
 
@@ -1399,11 +1381,8 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     selectedTableId = null;
 
     CreateReservationPage.draftPeople = null;
-
     CreateReservationPage.draftDate = null;
-
     CreateReservationPage.draftTime = null;
-
     CreateReservationPage.draftTableId = null;
 
     if (selectedDate != null && selectedTime != null) {
@@ -1450,16 +1429,14 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
 
       final utcDateTime = ecuadorToUtc(ecuadorDateTime);
 
-      debugPrint('CONSULTANDO MESAS DISPONIBLES:');
-
-      debugPrint(utcDateTime.toIso8601String());
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Consultando mesas disponibles.');
+      }
 
       final result = await ApiService.getAvailableTables(
         token,
         date: utcDateTime,
       );
-
-      debugPrint('RESPUESTA MESAS DISPONIBLES: $result');
 
       if (!mounted) return;
 
@@ -1505,7 +1482,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         loadingTables = false;
         errorMessage = error.message;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -1515,7 +1492,9 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         errorMessage = 'No fue posible consultar las mesas disponibles.';
       });
 
-      debugPrint('ERROR MESAS: $error');
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Error al consultar mesas disponibles.');
+      }
     }
   }
 
@@ -1843,14 +1822,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       // ========================================================
       // NOTIFICACIONES
       // ========================================================
-      //
-      // Si el test proporciona una función, se usa esa función.
-      //
-      // Si NO proporciona una función, se utiliza
-      // NotificationService normalmente.
-      //
-      // Por tanto, Android no cambia.
-      // ========================================================
 
       final requestPermission =
           widget.requestNotificationPermission ??
@@ -1864,12 +1835,11 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
           widget.scheduleReservationReminder ??
           NotificationService.scheduleReservationReminder;
 
-      final permission = await requestPermission();
+      await requestPermission();
 
-      debugPrint(
-        'PERMISO NOTIFICACIONES: '
-        '$permission',
-      );
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Permiso de notificaciones procesado.');
+      }
 
       // ========================================================
       // CREAR RESERVA
@@ -1902,11 +1872,8 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       if (!mounted) return;
 
       CreateReservationPage.draftPeople = null;
-
       CreateReservationPage.draftDate = null;
-
       CreateReservationPage.draftTime = null;
-
       CreateReservationPage.draftTableId = null;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1950,20 +1917,22 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
       setState(() {
         errorMessage = error.message;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
         errorMessage = 'Error al crear la reserva.';
       });
 
-      debugPrint('ERROR CREANDO RESERVA: $error');
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Error al crear la reserva.');
+      }
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        saving = false;
-      });
+      if (mounted) {
+        setState(() {
+          saving = false;
+        });
+      }
     }
   }
 
@@ -2449,11 +2418,7 @@ class _TableSelectionCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: enabled
-              ? onTap
-              : () {
-                  onTap();
-                },
+          onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -2507,7 +2472,7 @@ class _TableSelectionCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.people_outline,
                             size: 14,
                             color: AppColors.textSecondary,

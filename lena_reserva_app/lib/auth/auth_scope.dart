@@ -6,8 +6,8 @@ class AuthScope extends InheritedNotifier<AuthController> {
   const AuthScope({
     super.key,
     required AuthController auth,
-    required Widget child,
-  }) : super(notifier: auth, child: child);
+    required super.child,
+  }) : super(notifier: auth);
 
   static AuthController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AuthScope>();

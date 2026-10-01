@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'reservation_pages.dart';
@@ -334,9 +335,21 @@ class _AIPageState extends State<AIPage> {
     _scrollToBottom();
 
     try {
-      debugPrint('AI - Enviando consulta...');
-      debugPrint('AI - API: ${ApiService.baseUrl}');
-      debugPrint('AI - Autenticación disponible: ${token.isNotEmpty}');
+      // ========================================================
+      // LOG SEGURO DE DESARROLLO
+      //
+      // No se imprime:
+      // - token
+      // - mensaje del usuario
+      // - respuesta de la API
+      // - URL
+      // - datos personales
+      // ========================================================
+
+      if (kDebugMode) {
+        debugPrint('AI - Enviando consulta...');
+        debugPrint('AI - Autenticación disponible');
+      }
 
       final result = await ApiService.askAI(token: token, message: message);
 
@@ -353,6 +366,10 @@ class _AIPageState extends State<AIPage> {
               .map((mesa) => Map<String, dynamic>.from(mesa))
               .toList() ??
           <dynamic>[];
+
+      if (kDebugMode) {
+        debugPrint('AI - Disponibilidad procesada correctamente');
+      }
 
       // ========================================================
       // BORRADOR DE RESERVA
@@ -397,9 +414,8 @@ class _AIPageState extends State<AIPage> {
       // ========================================================
       // RESERVA DETECTADA
       //
-      // IMPORTANTE:
-      // NO seleccionamos ninguna mesa.
-      // Solo mostramos el botón para ir a Nueva reserva.
+      // La mesa NO se selecciona automáticamente.
+      // Nueva reserva será la encargada de seleccionarla.
       // ========================================================
 
       if (people != null && date != null && time != null) {
@@ -415,6 +431,10 @@ class _AIPageState extends State<AIPage> {
       // ========================================================
 
       if (exception.statusCode == 401) {
+        if (kDebugMode) {
+          debugPrint('AI - Sesión no autorizada');
+        }
+
         await auth.signOut();
 
         if (!mounted) {
@@ -445,6 +465,10 @@ class _AIPageState extends State<AIPage> {
             : 'No fue posible procesar la solicitud.';
       }
 
+      if (kDebugMode) {
+        debugPrint('AI - Error de API. Código: ${exception.statusCode}');
+      }
+
       setState(() {
         _messages.add(
           _ChatMessage(text: errorMessage, isUser: false, time: DateTime.now()),
@@ -453,6 +477,10 @@ class _AIPageState extends State<AIPage> {
 
       _scrollToBottom();
     } on SocketException {
+      if (kDebugMode) {
+        debugPrint('AI - No fue posible conectar con el servidor');
+      }
+
       if (!mounted) {
         return;
       }
@@ -472,6 +500,10 @@ class _AIPageState extends State<AIPage> {
 
       _scrollToBottom();
     } on TimeoutException {
+      if (kDebugMode) {
+        debugPrint('AI - Tiempo de espera agotado');
+      }
+
       if (!mounted) {
         return;
       }
@@ -491,6 +523,10 @@ class _AIPageState extends State<AIPage> {
 
       _scrollToBottom();
     } on FormatException {
+      if (kDebugMode) {
+        debugPrint('AI - Formato de respuesta no válido');
+      }
+
       if (!mounted) {
         return;
       }
@@ -509,6 +545,10 @@ class _AIPageState extends State<AIPage> {
 
       _scrollToBottom();
     } catch (_) {
+      if (kDebugMode) {
+        debugPrint('AI - Error inesperado al procesar la consulta');
+      }
+
       if (!mounted) {
         return;
       }
@@ -721,9 +761,8 @@ class _AIPageState extends State<AIPage> {
   // ============================================================
   // OPCIONES DE RESERVA
   //
-  // Ya NO selecciona mesa.
-  // Solo muestra los datos detectados y permite
-  // enviarlos a Nueva reserva.
+  // No selecciona mesa automáticamente.
+  // Solo muestra los datos detectados.
   // ============================================================
 
   Future<void> _showReservationOptions({
@@ -763,12 +802,6 @@ class _AIPageState extends State<AIPage> {
     required DateTime date,
     required TimeOfDay time,
   }) async {
-    // ==========================================================
-    // IMPORTANTE:
-    // La mesa SIEMPRE queda en null.
-    // Nueva reserva será la encargada de seleccionarla.
-    // ==========================================================
-
     CreateReservationPage.draftPeople = people.toString();
 
     CreateReservationPage.draftDate = DateTime(date.year, date.month, date.day);
@@ -786,8 +819,6 @@ class _AIPageState extends State<AIPage> {
 
     await Navigator.pushNamed(context, '/app/reservas/nueva');
 
-    // Al regresar dejamos explícitamente
-    // la mesa sin selección.
     CreateReservationPage.draftTableId = null;
   }
 
@@ -1569,7 +1600,7 @@ class _ReservationDraftSheet extends StatelessWidget {
             const SizedBox(height: 16),
 
             // ====================================================
-            // BOTÓN SOLICITADO
+            // SELECCIONAR MESA
             // ====================================================
             SizedBox(
               width: double.infinity,

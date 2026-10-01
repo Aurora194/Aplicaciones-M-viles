@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 import 'design/app_colors.dart';
 import 'services/api_service.dart';
+import 'services/app_logger.dart';
 import 'forgot_password_page.dart';
 import 'auth/auth_scope.dart';
 
@@ -71,31 +72,24 @@ class _LoginPageState extends State<LoginPage> {
 
         isPhysicalDevice = androidInfo.isPhysicalDevice;
 
-        debugPrint('========================================');
-        debugPrint('DETECCIÓN DEL DISPOSITIVO');
-        debugPrint('Modelo: ${androidInfo.model}');
-        debugPrint('Fabricante: ${androidInfo.manufacturer}');
-        debugPrint('Es físico: $isPhysicalDevice');
-        debugPrint(
-          'Tipo: ${isPhysicalDevice ? 'TELÉFONO FÍSICO' : 'EMULADOR ANDROID'}',
-        );
-        debugPrint('========================================');
+        AppLogger.info('device_detected', {
+          'platform': 'android',
+          'is_physical_device': isPhysicalDevice,
+        });
       } else if (Platform.isIOS) {
         final iosInfo = await deviceInfo.iosInfo;
 
         isPhysicalDevice = iosInfo.isPhysicalDevice;
 
-        debugPrint('========================================');
-        debugPrint('DETECCIÓN DEL DISPOSITIVO');
-        debugPrint('Modelo: ${iosInfo.model}');
-        debugPrint('Nombre: ${iosInfo.name}');
-        debugPrint('Es físico: $isPhysicalDevice');
-        debugPrint(
-          'Tipo: ${isPhysicalDevice ? 'IPHONE/IPAD FÍSICO' : 'SIMULADOR IOS'}',
-        );
-        debugPrint('========================================');
+        AppLogger.info('device_detected', {
+          'platform': 'ios',
+          'is_physical_device': isPhysicalDevice,
+        });
       } else {
-        debugPrint('Plataforma no móvil: ${Platform.operatingSystem}');
+        AppLogger.info('device_detected', {
+          'platform': Platform.operatingSystem,
+          'is_physical_device': isPhysicalDevice,
+        });
       }
 
       if (!mounted) return;
@@ -108,12 +102,7 @@ class _LoginPageState extends State<LoginPage> {
       // ==========================================================
       // SOLO DISPOSITIVO FÍSICO
       // ==========================================================
-      //
-      // En un teléfono físico evitamos que algún campo quede
-      // enfocado automáticamente al entrar al Login.
-      //
-      // En el emulador NO hacemos unfocus().
-      //
+
       if (isPhysicalDevice) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -121,13 +110,15 @@ class _LoginPageState extends State<LoginPage> {
           FocusManager.instance.primaryFocus?.unfocus();
         });
       }
-    } catch (e) {
-      debugPrint('No se pudo detectar el dispositivo: $e');
+    } catch (e, stackTrace) {
+      AppLogger.error('device_detection_error', {
+        'error_type': e.runtimeType.toString(),
+      });
+
+      debugPrintStack(stackTrace: stackTrace);
 
       if (!mounted) return;
 
-      // Si no se pudo detectar, mantenemos el comportamiento
-      // conservador del dispositivo físico.
       setState(() {
         _isPhysicalDevice = true;
         _deviceDetected = true;
@@ -152,6 +143,8 @@ class _LoginPageState extends State<LoginPage> {
     FocusScope.of(context).unfocus();
 
     if (!formKey.currentState!.validate()) {
+      AppLogger.warning('login_validation_failed', {'reason': 'invalid_form'});
+
       return;
     }
 
@@ -167,15 +160,18 @@ class _LoginPageState extends State<LoginPage> {
       // 1. LOGIN CONTRA EL BACKEND
       // ========================================================
 
+      AppLogger.info('login_started', {
+        'has_email': emailController.text.trim().isNotEmpty,
+        'has_password': passwordController.text.isNotEmpty,
+      });
+
       final result = await ApiService.login(
         emailController.text.trim(),
         passwordController.text,
       );
 
-      debugPrint('========================================');
-      debugPrint('LOGIN - RESPUESTA DEL BACKEND');
-      debugPrint('$result');
-      debugPrint('========================================');
+      // NO registrar result completo porque puede contener:
+      // accessToken, refreshToken y datos personales.
 
       final accessToken = result['accessToken']?.toString();
       final refreshToken = result['refreshToken']?.toString();
@@ -185,6 +181,10 @@ class _LoginPageState extends State<LoginPage> {
       // ========================================================
 
       if (accessToken == null || accessToken.isEmpty || accessToken == 'null') {
+        AppLogger.error('login_missing_access_token', {
+          'has_response': result.isNotEmpty,
+        });
+
         if (!mounted) return;
 
         setState(() {
@@ -227,14 +227,22 @@ class _LoginPageState extends State<LoginPage> {
         userLastName = usuario['apellido']?.toString();
       }
 
-      debugPrint('========================================');
-      debugPrint('USUARIO RECIBIDO');
-      debugPrint('Usuario: $usuario');
-      debugPrint('ID: $userId');
-      debugPrint('Rol: $role');
-      debugPrint('Nombre: $userName');
-      debugPrint('Apellido: $userLastName');
-      debugPrint('========================================');
+      // No registrar:
+      // - usuario completo
+      // - ID
+      // - nombre
+      // - apellido
+      // - correo
+      //
+      // Solo información técnica/no sensible.
+
+      AppLogger.info('login_user_data_received', {
+        'has_user_object': usuario is Map,
+        'has_user_id': userId != null,
+        'has_role': role != null && role.isNotEmpty,
+        'has_name': userName != null && userName.isNotEmpty,
+        'has_last_name': userLastName != null && userLastName.isNotEmpty,
+      });
 
       // ========================================================
       // 4. GUARDAR SESIÓN
@@ -250,11 +258,17 @@ class _LoginPageState extends State<LoginPage> {
           name: userName,
           lastName: userLastName,
         );
-      } catch (e) {
+      } catch (e, stackTrace) {
+        AppLogger.error('login_session_save_error', {
+          'error_type': e.runtimeType.toString(),
+        });
+
+        debugPrintStack(stackTrace: stackTrace);
+
         if (!mounted) return;
 
         setState(() {
-          error = 'No se pudo guardar la sesión en el dispositivo.\n$e';
+          error = 'No se pudo guardar la sesión en el dispositivo.';
           loading = false;
         });
 
@@ -272,15 +286,11 @@ class _LoginPageState extends State<LoginPage> {
           ? auth.landingRoute
           : widget.redirectTo!;
 
-      debugPrint('========================================');
-      debugPrint('LOGIN EXITOSO');
-      debugPrint('Usuario: ${auth.userName}');
-      debugPrint('Correo: ${auth.userEmail}');
-      debugPrint('ID: ${auth.userId}');
-      debugPrint('Rol: ${auth.userRole}');
-      debugPrint('Autenticado: ${auth.isAuthenticated}');
-      debugPrint('Destino: $destination');
-      debugPrint('========================================');
+      AppLogger.info('login_success', {
+        'authenticated': auth.isAuthenticated,
+        'has_user_role': auth.userRole != null,
+        'destination': destination,
+      });
 
       // ========================================================
       // 6. NAVEGAR
@@ -288,15 +298,20 @@ class _LoginPageState extends State<LoginPage> {
 
       try {
         await Navigator.pushReplacementNamed(context, destination);
-      } catch (e) {
-        if (!mounted) return;
+      } catch (e, stackTrace) {
+        AppLogger.error('login_navigation_error', {
+          'error_type': e.runtimeType.toString(),
+          'destination': destination,
+        });
 
-        debugPrint('Error de navegación después del login: $e');
+        debugPrintStack(stackTrace: stackTrace);
+
+        if (!mounted) return;
 
         setState(() {
           error =
               'El inicio de sesión fue correcto, pero no se pudo '
-              'abrir la pantalla "$destination".\n$e';
+              'abrir la pantalla "$destination".';
           loading = false;
         });
 
@@ -305,10 +320,10 @@ class _LoginPageState extends State<LoginPage> {
     } on ApiException catch (exception) {
       if (!mounted) return;
 
-      debugPrint(
-        'ApiException en login: '
-        '${exception.statusCode} - ${exception.message}',
-      );
+      AppLogger.warning('login_api_error', {
+        'status_code': exception.statusCode,
+        'has_message': exception.message.isNotEmpty,
+      });
 
       String message;
 
@@ -335,11 +350,11 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e, stackTrace) {
       if (!mounted) return;
 
-      debugPrint('========================================');
-      debugPrint('ERROR INESPERADO EN LOGIN');
-      debugPrint('$e');
+      AppLogger.error('login_unexpected_error', {
+        'error_type': e.runtimeType.toString(),
+      });
+
       debugPrintStack(stackTrace: stackTrace);
-      debugPrint('========================================');
 
       setState(() {
         error =
@@ -416,29 +431,12 @@ class _LoginPageState extends State<LoginPage> {
 
     final keyboardHeight = mediaQuery.viewInsets.bottom;
 
-    // ==========================================================
-    // IMPORTANTE
-    // ==========================================================
-    //
-    // En el dispositivo físico:
-    //   keyboardVisible = true cuando aparece el teclado.
-    //
-    // En el emulador:
-    //   keyboardVisible SIEMPRE será false.
-    //
-    // Por eso la tarjeta no cambia de posición ni tamaño
-    // cuando aparece el teclado del emulador.
-    //
     final keyboardVisible =
         _isPhysicalDevice && _deviceDetected && keyboardHeight > 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F5F4),
 
-      // ========================================================
-      // FÍSICO = adaptar pantalla al teclado
-      // EMULADOR = mantener pantalla fija
-      // ========================================================
       resizeToAvoidBottomInset: _isPhysicalDevice,
 
       appBar: AppBar(
@@ -475,24 +473,27 @@ class _LoginPageState extends State<LoginPage> {
           builder: (context, constraints) {
             final availableHeight = constraints.maxHeight;
 
+            // Espacio reservado para el padding inferior/superior.
+            final reservedHeight = keyboardVisible ? 20.0 : 44.0;
+
+            // Evita que BoxConstraints reciba un minHeight negativo.
+            final minHeight = (availableHeight - reservedHeight).clamp(
+              0.0,
+              double.infinity,
+            );
+
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
 
               padding: EdgeInsets.only(
                 left: 18,
                 right: 18,
-
-                // ==================================================
-                // En el emulador siempre usa el diseño normal.
-                // ==================================================
                 top: keyboardVisible ? 8 : 20,
                 bottom: keyboardVisible ? 12 : 24,
               ),
 
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: availableHeight - (keyboardVisible ? 20 : 44),
-                ),
+                constraints: BoxConstraints(minHeight: minHeight),
 
                 child: Align(
                   alignment: keyboardVisible
@@ -977,7 +978,6 @@ class _NavButton extends StatelessWidget {
 
           textStyle: TextStyle(
             fontSize: 14,
-
             fontWeight: active ? FontWeight.bold : FontWeight.w600,
           ),
 

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/app_logger.dart';
+
 class AuthController extends ChangeNotifier {
   static const String _keyAccessToken = 'access_token';
   static const String _keyRefreshToken = 'refresh_token';
@@ -142,18 +144,34 @@ class AuthController extends ChangeNotifier {
 
     notifyListeners();
 
-    debugPrint('========================================');
-    debugPrint('AUTH CONTROLLER - SIGN IN');
-    debugPrint('Token guardado: ${cleanToken.isNotEmpty}');
-    debugPrint('Correo: $_email');
-    debugPrint('ID: $_userId');
-    debugPrint('Rol: $_role');
-    debugPrint('Nombre: $_name');
-    debugPrint('Apellido: $_lastName');
-    debugPrint('Autenticado: $isAuthenticated');
-    debugPrint('Ruta: $landingRoute');
-    debugPrint('========================================');
+    // ------------------------------------------------------------
+    // LOG SEGURO
+    // ------------------------------------------------------------
+    //
+    // NO registrar:
+    // - token
+    // - refresh token
+    // - correo
+    // - ID
+    // - nombre
+    // - apellido
+    //
+    // Solo registramos indicadores booleanos y datos técnicos.
+    //
+
+    AppLogger.info('auth_session_saved', {
+      'authenticated': isAuthenticated,
+      'roleAvailable': _role != null && _role!.isNotEmpty,
+      'userIdAvailable': _userId != null,
+      'nameAvailable': _name != null && _name!.isNotEmpty,
+      'lastNameAvailable': _lastName != null && _lastName!.isNotEmpty,
+      'destination': landingRoute,
+    });
   }
+
+  // ============================================================
+  // SESIÓN DE PRUEBA
+  // ============================================================
 
   /// Configura una sesión únicamente para pruebas automatizadas.
   /// No utiliza SharedPreferences.
@@ -164,11 +182,13 @@ class AuthController extends ChangeNotifier {
   }) {
     _accessToken = token.trim();
     _refreshToken = refreshToken?.trim();
+
     _email = 'test@example.com';
     _role = 'CLIENTE';
     _userId = userId;
     _name = 'Usuario';
     _lastName = 'Prueba';
+
     _isReady = true;
     _restoreError = null;
 
@@ -217,17 +237,29 @@ class AuthController extends ChangeNotifier {
 
     notifyListeners();
 
-    debugPrint('========================================');
-    debugPrint('SESIÓN RESTAURADA');
-    debugPrint('Correo: $_email');
-    debugPrint('ID: $_userId');
-    debugPrint('Rol: $_role');
-    debugPrint(
-      'Token existe: ${_accessToken != null && _accessToken!.isNotEmpty}',
-    );
-    debugPrint('Autenticado: $isAuthenticated');
-    debugPrint('Ruta: $landingRoute');
-    debugPrint('========================================');
+    // ------------------------------------------------------------
+    // LOG SEGURO DE RESTAURACIÓN
+    // ------------------------------------------------------------
+    //
+    // No mostramos:
+    // - correo
+    // - ID
+    // - nombre
+    // - apellido
+    // - token
+    // - contenido del token
+    //
+
+    AppLogger.info('auth_session_restored', {
+      'authenticated': isAuthenticated,
+      'tokenAvailable': _accessToken != null && _accessToken!.isNotEmpty,
+      'refreshTokenAvailable':
+          _refreshToken != null && _refreshToken!.isNotEmpty,
+      'roleAvailable': _role != null && _role!.isNotEmpty,
+      'userIdAvailable': _userId != null,
+      'destination': landingRoute,
+      'restoreError': _restoreError != null,
+    });
   }
 
   // ============================================================
@@ -248,6 +280,9 @@ class AuthController extends ChangeNotifier {
     await prefs.setString(_keyAccessToken, cleanToken);
 
     notifyListeners();
+
+    // Nunca registrar el token ni parte de su contenido.
+    AppLogger.info('auth_access_token_updated');
   }
 
   // ============================================================
@@ -278,10 +313,7 @@ class AuthController extends ChangeNotifier {
 
     notifyListeners();
 
-    debugPrint('========================================');
-    debugPrint('SESIÓN CERRADA');
-    debugPrint('Autenticado: $isAuthenticated');
-    debugPrint('========================================');
+    AppLogger.info('auth_session_closed', {'authenticated': isAuthenticated});
   }
 
   // ============================================================

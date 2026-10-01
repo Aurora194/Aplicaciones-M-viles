@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/services/api_service.dart';
-import '../lib/screens/nueva_reserva_page.dart';
+import 'package:lena_reserva_app/services/api_service.dart';
+import 'package:lena_reserva_app/screens/nueva_reserva_page.dart';
 
 void main() {
   group('TEST 4 - Errores de formulario y servidor', () {
@@ -30,7 +30,7 @@ void main() {
 
         expect(exception.statusCode, 422);
         expect(exception.message, 'La cantidad de personas no es válida.');
-        expect(exception.fieldErrors?['personas'], 'Debe ser mayor que 0');
+        expect(exception.fieldErrors['personas'], 'Debe ser mayor que 0');
       },
     );
 

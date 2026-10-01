@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -11,9 +13,47 @@ import 'cliente_page.dart';
 import 'mesas_page.dart';
 import 'ai_page.dart';
 import 'auth/auth_scope.dart';
+import 'services/app_logger.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // =========================================================
+  // IDENTIFICADOR INTERNO DE SESIÓN
+  // =========================================================
+  final sessionId = DateTime.now().microsecondsSinceEpoch.toString();
+
+  // =========================================================
+  // MONITOREO DE ERRORES DE FLUTTER
+  // =========================================================
+  FlutterError.onError = (FlutterErrorDetails details) {
+    AppLogger.error('flutter_error', {
+      'session_id': sessionId,
+      'error_type': details.exception.runtimeType.toString(),
+      'has_stack': details.stack != null,
+    });
+
+    // Mantener el comportamiento normal de Flutter en modo debug.
+    FlutterError.presentError(details);
+  };
+
+  // =========================================================
+  // MONITOREO DE ERRORES NO CAPTURADOS
+  // =========================================================
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.error('uncaught_error', {
+      'session_id': sessionId,
+      'error_type': error.runtimeType.toString(),
+      'has_stack': true,
+    });
+
+    return true;
+  };
+
+  // =========================================================
+  // REGISTRO DEL INICIO DE SESIÓN DE LA APLICACIÓN
+  // =========================================================
+  AppLogger.info('app_session_started', {'session_id': sessionId});
 
   final auth = AuthController();
 
