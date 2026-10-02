@@ -299,7 +299,7 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-          if (isAdmin) ...[const _NewReservationButton()],
+          if (isAdmin) const _NewReservationButton(),
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
@@ -363,7 +363,7 @@ class _ReservationListPageState extends State<ReservationListPage> {
             ],
           ),
           const SizedBox(height: 18),
-          if (isAdmin) ...[const _NewReservationButton()],
+          if (isAdmin) const _NewReservationButton(),
           if (isAdmin) ...[
             const SizedBox(height: 12),
             const _ManageTablesButton(),
@@ -683,12 +683,15 @@ class _ReservationCard extends StatelessWidget {
                   _ReservationMeta(
                     icon: Icons.calendar_today_outlined,
                     text:
-                        '${ecuadorDate.day} ${_month(ecuadorDate.month)} ${ecuadorDate.year}',
+                        '${ecuadorDate.day} '
+                        '${_month(ecuadorDate.month)} '
+                        '${ecuadorDate.year}',
                   ),
                   _ReservationMeta(
                     icon: Icons.access_time_outlined,
                     text:
-                        '${ecuadorDate.hour.toString().padLeft(2, '0')}:${ecuadorDate.minute.toString().padLeft(2, '0')}',
+                        '${ecuadorDate.hour.toString().padLeft(2, '0')}:'
+                        '${ecuadorDate.minute.toString().padLeft(2, '0')}',
                   ),
                   _ReservationMeta(
                     icon: Icons.people_alt_outlined,
@@ -761,6 +764,10 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     initialized = true;
   }
 
+  // ==========================================================
+  // CAMBIAR ESTADO
+  // ==========================================================
+
   Future<void> _changeStatus(Reservation item, String status) async {
     final action = status == 'CONFIRMADA' ? 'confirmar' : 'cancelar';
 
@@ -806,10 +813,6 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
         id: item.id,
         status: status,
       );
-
-      // ========================================================
-      // NOTIFICACIONES
-      // ========================================================
 
       if (status == 'CONFIRMADA') {
         await NotificationService.requestPermission();
@@ -861,217 +864,37 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     }
   }
 
+  // ==========================================================
+  // EDITAR RESERVA
+  // ==========================================================
+
   Future<void> _edit(Reservation item) async {
-    final peopleController = TextEditingController(
-      text: item.people.toString(),
-    );
-
-    final formKey = GlobalKey<FormState>();
-
-    DateTime editDate = utcToEcuador(item.date);
-
-    TimeOfDay editTime = TimeOfDay.fromDateTime(editDate);
-
-    bool savingEdit = false;
-
     final result = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            return AlertDialog(
-              title: const Text('Editar reserva'),
-              content: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: peopleController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Número de personas',
-                        prefixIcon: Icon(Icons.people_outline),
-                      ),
-                      validator: (value) {
-                        final number = int.tryParse(value ?? '');
-
-                        if (number == null || number < 1 || number > 20) {
-                          return 'Ingrese entre 1 y 20 personas.';
-                        }
-
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.calendar_today_outlined),
-                            label: Text(
-                              '${editDate.day}/${editDate.month}/${editDate.year}',
-                            ),
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: dialogContext,
-                                firstDate: ecuadorToday(),
-                                lastDate: ecuadorToday().add(
-                                  const Duration(days: 365),
-                                ),
-                                initialDate: editDate,
-                              );
-
-                              if (picked == null || !dialogContext.mounted) {
-                                return;
-                              }
-
-                              setDialogState(() {
-                                editDate = DateTime(
-                                  picked.year,
-                                  picked.month,
-                                  picked.day,
-                                  editTime.hour,
-                                  editTime.minute,
-                                );
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.access_time_outlined),
-                            label: Text(_formatTime(editTime)),
-                            onPressed: () async {
-                              final picked = await showTimePicker(
-                                context: dialogContext,
-                                initialTime: editTime,
-                              );
-
-                              if (picked == null || !dialogContext.mounted) {
-                                return;
-                              }
-
-                              setDialogState(() {
-                                editTime = picked;
-
-                                editDate = DateTime(
-                                  editDate.year,
-                                  editDate.month,
-                                  editDate.day,
-                                  picked.hour,
-                                  picked.minute,
-                                );
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext, false);
-                  },
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: savingEdit
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) {
-                            return;
-                          }
-
-                          setDialogState(() {
-                            savingEdit = true;
-                          });
-
-                          try {
-                            final auth = AuthScope.of(context);
-
-                            final token = auth.accessToken;
-
-                            if (token == null || token.isEmpty) {
-                              throw const ApiException(
-                                401,
-                                'Sesión no disponible.',
-                              );
-                            }
-
-                            await ApiService.updateReservation(
-                              token: token,
-                              id: item.id,
-                              date: ecuadorToUtc(editDate),
-                              people: int.parse(peopleController.text),
-                              userId: auth.userId ?? 0,
-                              tableId: item.tableId,
-                            );
-
-                            await NotificationService.cancelReservationReminder(
-                              item.id,
-                            );
-
-                            await NotificationService.requestPermission();
-
-                            await NotificationService.scheduleReservationReminder(
-                              reservationId: item.id,
-                              reservationDateTime: editDate,
-                              minutesBefore: 30,
-                            );
-
-                            if (!dialogContext.mounted) {
-                              return;
-                            }
-
-                            Navigator.pop(dialogContext, true);
-                          } on ApiException catch (error) {
-                            if (dialogContext.mounted) {
-                              setDialogState(() {
-                                savingEdit = false;
-                              });
-                            }
-
-                            if (!mounted) return;
-
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(error.message)),
-                            );
-                          }
-                        },
-                  child: savingEdit
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Guardar'),
-                ),
-              ],
-            );
-          },
-        );
+        return _EditReservationDialog(item: item);
       },
     );
 
-    peopleController.dispose();
-
-    if (result == true && mounted) {
-      final token = AuthScope.of(context).accessToken;
-
-      if (token == null || token.isEmpty) {
-        return;
-      }
-
-      setState(() {
-        request = ApiService.getReservation(token, widget.id);
-      });
+    if (result != true || !mounted) {
+      return;
     }
+
+    final token = AuthScope.of(context).accessToken;
+
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      request = ApiService.getReservation(token, widget.id);
+    });
   }
+
+  // ==========================================================
+  // ELIMINAR
+  // ==========================================================
 
   Future<void> _delete(Reservation item) async {
     final confirmed = await showDialog<bool>(
@@ -1158,6 +981,8 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
 
           final item = snapshot.data!;
 
+          final ecuadorDate = utcToEcuador(item.date);
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -1198,13 +1023,16 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                         icon: Icons.event_outlined,
                         label: 'Fecha',
                         value:
-                            '${utcToEcuador(item.date).day} ${_month(utcToEcuador(item.date).month)} ${utcToEcuador(item.date).year}',
+                            '${ecuadorDate.day} '
+                            '${_month(ecuadorDate.month)} '
+                            '${ecuadorDate.year}',
                       ),
                       _DetailRow(
                         icon: Icons.access_time_outlined,
                         label: 'Hora',
                         value:
-                            '${utcToEcuador(item.date).hour.toString().padLeft(2, '0')}:${utcToEcuador(item.date).minute.toString().padLeft(2, '0')}',
+                            '${ecuadorDate.hour.toString().padLeft(2, '0')}:'
+                            '${ecuadorDate.minute.toString().padLeft(2, '0')}',
                       ),
                       _DetailRow(
                         icon: Icons.people_alt_outlined,
@@ -1255,6 +1083,325 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     );
   }
 }
+
+// ============================================================
+// DIÁLOGO DE EDICIÓN
+//
+// IMPORTANTE:
+// Este widget reemplaza el StatefulBuilder anterior.
+// El TextEditingController pertenece al diálogo y se destruye
+// únicamente cuando el propio diálogo termina su ciclo de vida.
+// ============================================================
+
+class _EditReservationDialog extends StatefulWidget {
+  const _EditReservationDialog({required this.item});
+
+  final Reservation item;
+
+  @override
+  State<_EditReservationDialog> createState() => _EditReservationDialogState();
+}
+
+class _EditReservationDialogState extends State<_EditReservationDialog> {
+  late final TextEditingController peopleController;
+
+  late DateTime editDate;
+
+  late TimeOfDay editTime;
+
+  final formKey = GlobalKey<FormState>();
+
+  bool savingEdit = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    peopleController = TextEditingController(
+      text: widget.item.people.toString(),
+    );
+
+    editDate = utcToEcuador(widget.item.date);
+
+    editTime = TimeOfDay.fromDateTime(editDate);
+  }
+
+  @override
+  void dispose() {
+    peopleController.dispose();
+    super.dispose();
+  }
+
+  // ==========================================================
+  // FECHA
+  // ==========================================================
+
+  Future<void> _pickDate() async {
+    final today = ecuadorToday();
+
+    final initialDate = editDate.isBefore(today) ? today : editDate;
+
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      initialDate: initialDate,
+    );
+
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      editDate = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        editTime.hour,
+        editTime.minute,
+      );
+    });
+  }
+
+  // ==========================================================
+  // HORA
+  // ==========================================================
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: editTime,
+    );
+
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      editTime = picked;
+
+      editDate = DateTime(
+        editDate.year,
+        editDate.month,
+        editDate.day,
+        picked.hour,
+        picked.minute,
+      );
+    });
+  }
+
+  // ==========================================================
+  // GUARDAR
+  // ==========================================================
+
+  Future<void> _save() async {
+    if (savingEdit) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    final auth = AuthScope.of(context);
+
+    final token = auth.accessToken;
+
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La sesión no está disponible.')),
+      );
+
+      return;
+    }
+
+    final people = int.tryParse(peopleController.text.trim());
+
+    if (people == null) {
+      return;
+    }
+
+    final ecuadorDateTime = DateTime(
+      editDate.year,
+      editDate.month,
+      editDate.day,
+      editTime.hour,
+      editTime.minute,
+    );
+
+    setState(() {
+      savingEdit = true;
+    });
+
+    try {
+      // ========================================================
+      // ACTUALIZAR RESERVA
+      // ========================================================
+
+      await ApiService.updateReservation(
+        token: token,
+        id: widget.item.id,
+        date: ecuadorToUtc(ecuadorDateTime),
+        people: people,
+        userId: auth.userId ?? 0,
+        tableId: widget.item.tableId,
+      );
+
+      // ========================================================
+      // ACTUALIZAR RECORDATORIO
+      // ========================================================
+
+      await NotificationService.cancelReservationReminder(widget.item.id);
+
+      await NotificationService.requestPermission();
+
+      await NotificationService.scheduleReservationReminder(
+        reservationId: widget.item.id,
+        reservationDateTime: ecuadorDateTime,
+        minutesBefore: 30,
+      );
+
+      // ========================================================
+      // CERRAR DIÁLOGO
+      // ========================================================
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pop(true);
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      if (error.statusCode == 401) {
+        await AuthScope.of(context).signOut();
+
+        if (!mounted) {
+          return;
+        }
+
+        Navigator.pushReplacementNamed(context, '/login');
+
+        return;
+      }
+
+      setState(() {
+        savingEdit = false;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        savingEdit = false;
+      });
+
+      if (kDebugMode) {
+        debugPrint('RESERVAS - Error al editar reserva: $error');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No fue posible actualizar la reserva.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar reserva'),
+      content: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: peopleController,
+                keyboardType: TextInputType.number,
+                enabled: !savingEdit,
+                decoration: const InputDecoration(
+                  labelText: 'Número de personas',
+                  prefixIcon: Icon(Icons.people_outline),
+                ),
+                validator: (value) {
+                  final number = int.tryParse(value ?? '');
+
+                  if (number == null || number < 1 || number > 20) {
+                    return 'Ingrese entre 1 y 20 personas.';
+                  }
+
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.calendar_today_outlined),
+                      label: Text(
+                        '${editDate.day}/'
+                        '${editDate.month}/'
+                        '${editDate.year}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onPressed: savingEdit ? null : _pickDate,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.access_time_outlined),
+                      label: Text(_formatTime(editTime)),
+                      onPressed: savingEdit ? null : _pickTime,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: savingEdit
+              ? null
+              : () {
+                  Navigator.of(context).pop(false);
+                },
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: savingEdit ? null : _save,
+          child: savingEdit
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// DETALLE
+// ============================================================
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
@@ -1726,9 +1873,9 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     );
   }
 
-  // ============================================================
-  // CREAR RESERVA + NOTIFICACIONES
-  // ============================================================
+  // ==========================================================
+  // CREAR RESERVA
+  // ==========================================================
 
   Future<void> _submit() async {
     if (!mounted) return;
@@ -1819,10 +1966,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
     });
 
     try {
-      // ========================================================
-      // NOTIFICACIONES
-      // ========================================================
-
       final requestPermission =
           widget.requestNotificationPermission ??
           NotificationService.requestPermission;
@@ -1841,10 +1984,6 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         debugPrint('RESERVAS - Permiso de notificaciones procesado.');
       }
 
-      // ========================================================
-      // CREAR RESERVA
-      // ========================================================
-
       final reservation = await ApiService.createReservation(
         token: token,
         date: utcDateTime,
@@ -1853,15 +1992,7 @@ class _CreateReservationPageState extends State<CreateReservationPage> {
         tableId: selectedTableId!,
       );
 
-      // ========================================================
-      // NOTIFICACIÓN: RESERVA CREADA
-      // ========================================================
-
       await showReservationCreated(reservationId: reservation.id);
-
-      // ========================================================
-      // NOTIFICACIÓN: RECORDATORIO
-      // ========================================================
 
       await scheduleReservationReminder(
         reservationId: reservation.id,
